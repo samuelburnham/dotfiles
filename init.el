@@ -115,6 +115,16 @@
   :config
   (evil-mode 1))
 
+;; Delete without register, "DD" deletes line
+  (evil-define-operator evil-delete-without-register (beg end type yank-handler)
+    (interactive "<R><y>")
+    (evil-delete beg end type ?_ yank-handler))
+  (define-key evil-normal-state-map (kbd "D") 'evil-delete-without-register)
+  (define-key evil-visual-state-map (kbd "D") 'evil-delete-without-register)
+
+;; Do something similar with 'evil-change "C-w" change without register/kill ring
+;;(define-key evil-visual-state-map (kbd "c") 'evil-delete-without-register)
+
 ;; Helm
 (use-package helm
   :init
@@ -160,10 +170,15 @@
   :init
   (setq which-key-separator " ")
   (setq which-key-prefix-prefix "+")
-;;  :diminish which-key-mode
   :config
   (which-key-mode)
   (setq which-key-idle-delay 0.3))
+
+;;(use-package which-key
+;;  :init (which-key-mode)
+;;  :diminish which-key-mode
+;;  :config
+;;  (setq which-key-idle-delay 0.3))
 
 ;; All The Icons
 (use-package all-the-icons)
@@ -173,6 +188,13 @@
   :init (doom-modeline-mode 1)
   :custom ((doom-modeline-height 15)))
 
+;; Programming Configs
+;; Global tabs into two spaces unless otherwise specified
+(setq-default indent-tabs-mode nil)
+(setq-default tab-width 2)
+(setq tab-width 2)
+;;(defvaralias 'rust-indent-offset 'tab-width)
+
 ;;Keybindings for lambda and forall
 (global-set-key (kbd "M-l") "λ")
 (global-set-key (kbd "M-;") "∀")
@@ -180,17 +202,10 @@
 (use-package rainbow-delimiters
   :hook (prog-mode . rainbow-delimiters-mode))
 
-;;(use-package counsel
-;;  :bind(("M-x" . counsel-M-x))
+(use-package counsel
+  :bind(("M-x" . counsel-M-x))
 
-;;(use-package helpful
 
-;; Programming Configs
-;; Global tabs into two spaces unless otherwise specified
-(setq-default indent-tabs-mode nil)
-(setq-default tab-width 2)
-(setq tab-width 2)
-;;(defvaralias 'rust-indent-offset 'tab-width)
 
         
 (custom-set-variables
