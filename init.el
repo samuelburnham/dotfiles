@@ -39,7 +39,7 @@
                 eshell-mode-hook))
   (add-hook mode (lambda () (display-line-numbers-mode 0))))
 
-;; Customized for 34" as well
+;; TODO: customize based on monitor size
 (add-to-list 'default-frame-alist '(height . 24))
 (add-to-list 'default-frame-alist '(width . 80))
 
@@ -112,8 +112,32 @@
 
 ;; Vim Evil mode
 (use-package evil
+  :init
+  (setq evil-want-integration t)
   :config
   (evil-mode 1))
+
+;; Keep cursor in place when scrolling
+(setq scroll-preserve-screen-position 1)
+
+;; Below scroll commands are backwards, e.g. "scroll-down" actually scrolls up
+(defun scroll-half-page-down ()
+  "scroll down half the page"
+  (interactive)
+  (scroll-down (/ (window-body-height) 2)))
+
+(defun scroll-half-page-up ()
+  "scroll up half the page"
+  (interactive)
+  (scroll-up (/ (window-body-height) 2)))
+
+;; Set C-k/C-j to scroll up/down
+(global-set-key (kbd "C-k") 'scroll-half-page-down)
+(global-set-key (kbd "C-j") 'scroll-half-page-up)
+
+;; scroll window up/down by one line
+(global-set-key (kbd "M-k") 'scroll-down-line)
+(global-set-key (kbd "M-j") 'scroll-up-line)
 
 ;; Helm
 (use-package helm
@@ -153,7 +177,7 @@
 ;;  :config
 ;;  (ivy-mode 1))
 
-(use-package command-log-mode)
+;;(use-package command-log-mode)
 
 ;; Which Key
 (use-package which-key
