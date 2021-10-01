@@ -16,6 +16,7 @@
 (require 'use-package)
 (setq use-package-always-ensure t)
 
+(setq package-enable-at-startup nil)
 
 ;; UI Configs
 (setq inhibit-startup-message t)
@@ -25,7 +26,7 @@
 (tool-bar-mode -1)          ; Disable the toolbar
 (tooltip-mode -1)           ; Disable tooltips
 (menu-bar-mode -1)          ; Disable the menu bar
-(set-fringe-mode 10)        ; Give some breathing room on the edges
+;;(set-fringe-mode 10)        ; Give some breathing room on the edges
 
 ;; Add columns and line numbers
 (column-number-mode)
@@ -80,14 +81,16 @@
   :prefix "SPC"
   :non-normal-prefix "M-SPC"
 ;;  "/"   '(helm-projectile-rg :which-key "ripgrep")
-;;  "TAB" '(switch-to-previous-buffer :which-key "previous buffer")
+  "TAB" '(switch-to-previous-buffer :which-key "previous buffer")
   "SPC" '(helm-M-x :which-key "M-x")
+  "y" '(helm-show-kill-ring :which-key "Show kill ring")
 ;;  "pf"  '(helm-projectile-find-file :which-key "find files")
 ;;  "pp"  '(helm-projectile-switch-project :which-key "switch project")
 ;;  "pb"  '(helm-projectile-switch-to-buffer :which-key "switch buffer")
 ;;  "pr"  '(helm-show-kill-ring :which-key "show kill ring")
   ;; Buffers
   "bb"  '(helm-mini :which-key "buffers list, enter name to create new")
+  "bd"  '(kill-this-buffer :which-key "kill current buffer")
 ;;  ;; Window
   "wl"  '(windmove-right :which-key "move right")
   "wh"  '(windmove-left :which-key "move left")
@@ -176,6 +179,12 @@
         helm-autoresize-min-height 20)
   :config
   (helm-mode 1))
+
+;; Switch to most recent buffer
+(defun switch-to-previous-buffer ()
+  (interactive)
+  (switch-to-buffer (other-buffer)))
+;;(global-set-key
 ;;
 ;;;;(use-package ivy
 ;;;;  :diminish
@@ -202,9 +211,10 @@
   :init
   (setq which-key-separator " ")
   (setq which-key-prefix-prefix "+")
+  :diminish which-key-mode
   :config
   (which-key-mode)
-  (setq which-key-idle-delay 0.3))
+  (setq which-key-idle-delay 0.5))
 
 ;;(use-package which-key
 ;;  :init (which-key-mode)
@@ -218,7 +228,7 @@
 (use-package doom-modeline
   :ensure t
   :init (doom-modeline-mode 1)
-  :custom ((doom-modeline-height 15)))
+  :custom ((doom-modeline-height 10)))
 
 (use-package rainbow-delimiters
   :hook (prog-mode . rainbow-delimiters-mode))
@@ -248,15 +258,18 @@
 	(setq rust-indent-offset 2)
 	(setq rust-format-on-save t))
 	
+(setq js-indent-level 2)
+(setq js-format-on-save t)
 
 ;;Keybindings for lambda and forall
 (global-set-key (kbd "M-l") "λ")
 (global-set-key (kbd "M-;") "∀")
 
-;; (setq lean4-mode-required-packages '(dash f flycheck lsp-mode magit-section s))
-;; (use-package lean4-mode)
-;;(use-package company-lean)
-;; (use-package helm-lean)
+(use-package magit)
+
+(setq load-path (cons "/home/sammy/repos/work/lean/lean4/lean4-mode" load-path))
+(setq lean4-mode-required-packages '(dash f flycheck lsp-mode magit-section s))
+(require 'lean4-mode)
 
 (global-set-key (kbd "S-SPC") #'company-complete)
 
@@ -295,9 +308,13 @@
  ;; If you edit it by hand, you could mess it up, so be careful.
  ;; Your init file should contain only one such instance.
  ;; If there is more than one, they won't work right.
+ '(doom-modeline-bar-width 4)
+ '(doom-modeline-window-width-limit 70)
  '(helm-completion-style 'emacs)
+ '(lsp-headerline-breadcrumb-enable t)
  '(package-selected-packages
-   '(lean4-mode company-lean lean-mode rainbow-delimiters ace-window which-key use-package typescript-mode tern spaceline smooth-scrolling rustic rust-mode neotree lsp-ui js2-mode ivy helm-rg helm-projectile general flycheck evil-org evil-escape eglot doom-themes doom-modeline company-lsp command-log-mode anzu)))
+   '(magit js-mode lean4-mode company-lean lean-mode rainbow-delimiters ace-window which-key use-package typescript-mode tern spaceline smooth-scrolling rustic rust-mode neotree lsp-ui js2-mode ivy helm-rg helm-projectile general flycheck evil-org evil-escape eglot doom-themes doom-modeline company-lsp command-log-mode anzu))
+ '(which-key-popup-type 'minibuffer))
 (custom-set-faces
  ;; custom-set-faces was added by Custom.
  ;; If you edit it by hand, you could mess it up, so be careful.
