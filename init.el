@@ -90,7 +90,7 @@
 ;;  "pr"  '(helm-show-kill-ring :which-key "show kill ring")
   ;; Buffers
   "bb"  '(helm-mini :which-key "buffers list, enter name to create new")
-  "bd"  '(kill-this-buffer :which-key "kill current buffer")
+  "bd"  '(kill-current-buffer :which-key "kill current buffer")
 ;;  ;; Window
   "wl"  '(windmove-right :which-key "move right")
   "wh"  '(windmove-left :which-key "move left")
@@ -236,11 +236,10 @@
 ;;(use-package counsel
 ;;  :bind(("M-x" . counsel-M-x))
 
-;;;; Programming Configs
-;;;; Global tabs into two spaces unless otherwise specified
+;; Programming Configs
+;; Global tabs into two spaces unless otherwise specified
 ;;(setq-default indent-tabs-mode nil)
 ;;(setq-default tab-width 2)
-;;;;(defvaralias 'rust-indent-offset 'tab-width)
 ;;
 ;;(use-package rustic
 ;;  :ensure
@@ -254,9 +253,14 @@
 ;;    (setq-local buffer-save-without-query t)))
 
 (use-package rust-mode
-	:config
-	(setq rust-indent-offset 2)
-	(setq rust-format-on-save t))
+  :config
+  (setq rust-indent-offset 2)
+  (setq rust-format-on-save nil))
+
+(use-package haskell-mode
+  :config
+  (setq haskell-indent-mode t)
+  (setq haskell-indent-offset 2))
 	
 (setq js-indent-level 2)
 (setq js-format-on-save t)
@@ -267,9 +271,12 @@
 
 (use-package magit)
 
+(use-package lsp-mode)
+
 (setq load-path (cons "/home/sammy/repos/work/lean/lean4/lean4-mode" load-path))
 (setq lean4-mode-required-packages '(dash f flycheck lsp-mode magit-section s))
 (require 'lean4-mode)
+(setq lean4-info-mode t)
 
 (global-set-key (kbd "S-SPC") #'company-complete)
 
@@ -312,8 +319,9 @@
  '(doom-modeline-window-width-limit 70)
  '(helm-completion-style 'emacs)
  '(lsp-headerline-breadcrumb-enable t)
+ '(markdown-list-indent-width 2)
  '(package-selected-packages
-   '(magit js-mode lean4-mode company-lean lean-mode rainbow-delimiters ace-window which-key use-package typescript-mode tern spaceline smooth-scrolling rustic rust-mode neotree lsp-ui js2-mode ivy helm-rg helm-projectile general flycheck evil-org evil-escape eglot doom-themes doom-modeline company-lsp command-log-mode anzu))
+	  '(project haskell-mode magit js-mode lean4-mode company-lean lean-mode rainbow-delimiters ace-window which-key use-package typescript-mode tern spaceline smooth-scrolling rustic rust-mode neotree lsp-ui js2-mode ivy helm-rg helm-projectile general flycheck evil-org evil-escape eglot doom-themes doom-modeline company-lsp command-log-mode anzu))
  '(which-key-popup-type 'minibuffer))
 (custom-set-faces
  ;; custom-set-faces was added by Custom.
