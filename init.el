@@ -1,22 +1,34 @@
 ;; Initialize package sources
-(require 'package)
+;;(require 'package)
+;;
+;;(setq package-archives '(("melpa" . "https://melpa.org/packages/")
+;;                         ("org" . "https://orgmode.org/elpa/")
+;;                         ("elpa" . "https://elpa.gnu.org/packages/")))
+;;
+;;(package-initialize)
+;;(unless package-archive-contents
+;; (package-refresh-contents))
 
-(setq package-archives '(("melpa" . "https://melpa.org/packages/")
-                         ("org" . "https://orgmode.org/elpa/")
-                         ("elpa" . "https://elpa.gnu.org/packages/")))
-
-(package-initialize)
-(unless package-archive-contents
- (package-refresh-contents))
+;; Enable straight.el
+(defvar bootstrap-version)
+(let ((bootstrap-file
+       (expand-file-name "straight/repos/straight.el/bootstrap.el" user-emacs-directory))
+      (bootstrap-version 5))
+  (unless (file-exists-p bootstrap-file)
+    (with-current-buffer
+        (url-retrieve-synchronously
+         "https://raw.githubusercontent.com/raxod502/straight.el/develop/install.el"
+         'silent 'inhibit-cookies)
+      (goto-char (point-max))
+      (eval-print-last-sexp)))
+  (load bootstrap-file nil 'nomessage))
 
 ;; Initialize use-package on non-Linux platforms
-(unless (package-installed-p 'use-package)
-   (package-install 'use-package))
+;;(unless (package-installed-p 'use-package)
+;;   (package-install 'use-package))
 
-(require 'use-package)
-(setq use-package-always-ensure t)
-
-(setq package-enable-at-startup nil)
+(straight-use-package 'use-package)
+(setq straight-use-package-by-default t)
 
 ;; UI Configs
 (setq inhibit-startup-message t)
@@ -26,28 +38,28 @@
 (tool-bar-mode -1)          ; Disable the toolbar
 (tooltip-mode -1)           ; Disable tooltips
 (menu-bar-mode -1)          ; Disable the menu bar
-;;(set-fringe-mode 10)        ; Give some breathing room on the edges
+;;(set-fringe-mode 10)      ; Give some breathing room on the edges
 
 ;; Add columns and line numbers
 (column-number-mode)
 (global-display-line-numbers-mode t)
+;;(global-whitespace-mode -1)
+;;(setq display-line-numbers 'relative)
 
 ;; Disable line numbers for some modes
-(dolist (mode '(org-mode-hook
-                term-mode-hook
-                shell-mode-hook
-                eshell-mode-hook))
-  (add-hook mode (lambda () (display-line-numbers-mode 0))))
+;;(dolist (mode '(org-mode-hook
+;;                term-mode-hook
+;;                shell-mode-hook
+;;                eshell-mode-hook))
+;;  (add-hook mode (lambda () (display-line-numbers-mode 0))))
 
 ;; TODO: customize based on monitor size
-(add-to-list 'default-frame-alist '(height . 24))
-(add-to-list 'default-frame-alist '(width . 80))
+;;(add-to-list 'default-frame-alist '(height . 80))
+;;(add-to-list 'default-frame-alist '(width . 200))
 
 (use-package smooth-scrolling
   :config
   (smooth-scrolling-mode 1))
-
-(use-package ace-window)
 
 ;; Theme
 (use-package doom-themes
@@ -58,89 +70,111 @@
 ;; Make ESC quit prompts
 (global-set-key (kbd "<escape>") 'keyboard-escape-quit)
 
+;; TODO: figure out best way to autosave
+;; Don't use #filename#, it's cluttered
 ;; Other configs
-(setq make-backup-files t
-      auto-save-default t
-      backup-directory-alist
-      `(("." . "~/.emacs-auto-saves"))
-      delete-old-versions t
-      kept-new-versions 6
-      kept-old-versions 2
-      version-control t)
+;;(setq make-backup-files t
+;;      auto-save-default t
+;;      backup-directory-alist
+;;      `(("." . "~/.emacs-auto-saves"))
+;;      delete-old-versions t
+;;      kept-new-versions 6
+;;      kept-old-versions 2
+;;      version-control t)
+;;
 
 (desktop-save-mode t)
 (savehist-mode t)
 (add-to-list 'savehist-additional-variables 'kill-ring)
+
 ;; Auto reload buffer when changed on disk
 (global-auto-revert-mode t)
 
-;; Custom keybinding
+;; TODO fix kill-emacs error
+;;(setq kill-emacs-hook nil)
+;; For some reason org-babel is getting added to kill-emacs-hook
+;; May have something to do with running emacs from terminal instead of Gnome (which I can't do with home-manager for some reason)
+;; Old value (org-babel caused errors)
+;; (savehist-autosave org-babel-remove-temporary-stable-directory org-babel-remove-temporary-directory lsp--global-teardown recentf-save-list bookmark-exit-hook-internal tramp-archive-cleanup-hash tramp-dump-connection-properties straight--delete-stderr-file)
+
+;;;; Custom keybinding
 (use-package general
   :config (general-define-key
   :states '(normal visual insert emacs)
   :prefix "SPC"
   :non-normal-prefix "M-SPC"
-;;  "/"   '(helm-projectile-rg :which-key "ripgrep")
+;;;;  "/"   '(helm-projectile-rg :which-key "ripgrep")
   "TAB" '(switch-to-previous-buffer :which-key "previous buffer")
   "SPC" '(helm-M-x :which-key "M-x")
   "y" '(helm-show-kill-ring :which-key "Show kill ring")
-;;  "pf"  '(helm-projectile-find-file :which-key "find files")
-;;  "pp"  '(helm-projectile-switch-project :which-key "switch project")
-;;  "pb"  '(helm-projectile-switch-to-buffer :which-key "switch buffer")
-;;  "pr"  '(helm-show-kill-ring :which-key "show kill ring")
-  ;; Buffers
+;;;;  "pf"  '(helm-projectile-find-file :which-key "find files")
+;;;;  "pp"  '(helm-projectile-switch-project :which-key "switch project")
+;;;;  "pb"  '(helm-projectile-switch-to-buffer :which-key "switch buffer")
+;;;;  "pr"  '(helm-show-kill-ring :which-key "show kill ring")
+;; Buffers
   "bb"  '(helm-mini :which-key "buffers list, enter name to create new")
   "bd"  '(kill-current-buffer :which-key "kill current buffer")
-;;  ;; Window
+;;;;  ;; Window
   "wl"  '(windmove-right :which-key "move right")
   "wh"  '(windmove-left :which-key "move left")
   "wk"  '(windmove-up :which-key "move up")
   "wj"  '(windmove-down :which-key "move bottom")
   "w/"  '(split-window-right :which-key "split right")
   "w-"  '(split-window-below :which-key "split bottom")
-  "wr"  '(ace-window :which-key "rotate windows")
+;;;;  "wr"  '(ace-window :which-key "rotate windows")
   "ws"  '(ace-swap-window :which-key "swap windows")
   "wx"  '(delete-window :which-key "delete window")
   "qz"  '(delete-frame :which-key "delete frame")
   "qq"  '(kill-emacs :which-key "quit")
-;;  ;; NeoTree
-;;  ;;"ft"  '(neotree-toggle :which-key "toggle neotree")
-  ;;"br"  '(rename-current-buffer-file :which-key "rename current buffer file")
-;;  ;; Org
-;;  ;; Others
-;;  "at"  '(eshell :which-key "open shell")
+;;  ;; Magit TODO
+;;  ;; "ga" = git add
+;;  ;; "gc" = git commit
+;;  ;; etc
+;;;;  ;; NeoTree
+;;;;  ;;"ft"  '(neotree-toggle :which-key "toggle neotree")
+;;  ;;"br"  '(rename-current-buffer-file :which-key "rename current buffer file")
+;;;;  ;; Org
+;;;;  ;; Others
+;;;;  "at"  '(eshell :which-key "open shell")
   "af"  '(make-frame :which-key "new frame")
 ))
+;;
 
-;; Vim Evil mode
+;; Switch to most recent buffer
+(defun switch-to-previous-buffer ()
+  (interactive)
+  (switch-to-buffer (other-buffer)))
+
+;;;; Vim Evil mode
 (use-package evil
   :init
   (setq evil-want-integration t)
+  (setq evil-want-C-i-jump nil)
   :config
   (evil-mode 1))
-
-;; Delete without register, "DD" deletes line
-(evil-define-operator evil-delete-without-register (beg end type yank-handler)
-  (interactive "<R><y>")
-  (evil-delete beg end type ?_ yank-handler))
-(define-key evil-normal-state-map (kbd "D") 'evil-delete-without-register)
-(define-key evil-visual-state-map (kbd "D") 'evil-delete-without-register)
-
-;; Do something similar with 'evil-change "C-w" change without register/kill ring
-;;(define-key evil-visual-state-map (kbd "c") 'evil-delete-without-register)
-
-;; Use visual line motions, allowing scroll within wrapped lines
-(evil-global-set-key 'motion "j" 'evil-next-visual-line)
-(evil-global-set-key 'motion "k" 'evil-previous-visual-line)
-
-;; (evil-set-initial-state
-;;(use-package evil-collection)
-
-
+;;
+;;;; Delete without register, "DD" deletes line
+;;;;(evil-define-operator evil-delete-without-register (beg end type yank-handler)
+;;;;  (interactive "<R><y>")
+;;;;  (evil-delete beg end type ?_ yank-handler))
+;;;;(define-key evil-normal-state-map (kbd "D") 'evil-delete-without-register)
+;;;;(define-key evil-visual-state-map (kbd "D") 'evil-delete-without-register)
+;;
+;;;; Do something similar with 'evil-change "C-w" change without register/kill ring
+;;;;(define-key evil-visual-state-map (kbd "c") 'evil-delete-without-register)
+;;
+;;;; Use visual line motions, allowing scroll within wrapped lines
+;;;;(evil-global-set-key 'motion "j" 'evil-next-visual-line)
+;;;;(evil-global-set-key 'motion "k" 'evil-previous-visual-line)
+;;
+;;;; (evil-set-initial-state
+;;;;(use-package evil-collection)
+;;
+;;
 ;; Keep cursor in place when scrolling
 (setq scroll-preserve-screen-position 1)
-
-;; Below scroll commands are backwards, e.g. "scroll-down" actually scrolls up
+;;
+;;;; Below scroll commands are backwards, e.g. "scroll-down" actually scrolls up
 (defun scroll-half-page-down ()
   "scroll down half the page"
   (interactive)
@@ -159,11 +193,17 @@
 (global-set-key (kbd "M-k") 'scroll-down-line)
 (global-set-key (kbd "M-j") 'scroll-up-line)
 
+(use-package ace-window)
 
-;; Helm
+;; TODO
 (use-package helm
-  :init
-  (setq helm-M-x-fuzzy-match t
+  :config
+  (helm-mode 1))
+
+;;;; Helm
+;;(use-package helm
+;;  :init
+;;  (setq helm-M-x-fuzzy-match t
 ;;        helm-mode-fuzzy-match t
 ;;        helm-buffers-fuzzy-matching t
 ;;        helm-recentf-fuzzy-match t
@@ -175,16 +215,11 @@
 ;;        (setq helm-split-window-inside-p t
 ;;        helm-move-to-line-cycle-in-source t
 ;;        helm-echo-input-in-header-line t
-        helm-autoresize-max-height 0
-        helm-autoresize-min-height 20)
-  :config
-  (helm-mode 1))
-
-;; Switch to most recent buffer
-(defun switch-to-previous-buffer ()
-  (interactive)
-  (switch-to-buffer (other-buffer)))
-;;(global-set-key
+;;        helm-autoresize-max-height 0
+;;       helm-autoresize-min-height 20)
+;;  :config
+;;  (helm-mode 1))
+;;
 ;;
 ;;;;(use-package ivy
 ;;;;  :diminish
@@ -206,93 +241,104 @@
 ;;
 ;;;;(use-package command-log-mode)
 ;;
-;; Which Key
-(use-package which-key
-  :init
-  (setq which-key-separator " ")
-  (setq which-key-prefix-prefix "+")
-  :diminish which-key-mode
-  :config
-  (which-key-mode)
-  (setq which-key-idle-delay 0.5))
 
-;;(use-package which-key
-;;  :init (which-key-mode)
+;; TODO
+;; which-key-setup-minibuffer
+;; Which Key
+;;(use-package which-key)
+  ;;:init
+  ;;(setq which-key-separator " ")
+  ;;(setq which-key-prefix-prefix "+")
 ;;  :diminish which-key-mode
-;;  :config
-;;  (setq which-key-idle-delay 0.3))
+  ;;:config
+  ;;(which-key-mode)
+  ;;(setq which-key-idle-delay 0.5))
+;;
+(use-package which-key
+  :init (which-key-mode)
+  :config
+  (setq which-key-idle-delay 0.3))
 
 ;; All The Icons
 (use-package all-the-icons)
 
 (use-package doom-modeline
-  :ensure t
   :init (doom-modeline-mode 1)
   :custom ((doom-modeline-height 10)))
 
+;; TODO
 (use-package rainbow-delimiters
   :hook (prog-mode . rainbow-delimiters-mode))
-
-;;(use-package counsel
-;;  :bind(("M-x" . counsel-M-x))
-
-;; Programming Configs
-;; Global tabs into two spaces unless otherwise specified
-;;(setq-default indent-tabs-mode nil)
-;;(setq-default tab-width 2)
 ;;
-;;(use-package rustic
-;;  :ensure
-;;  :config
-;;  (setq rustic-indent-offset 2)
-;;  (setq rustic-format-on-save t)
-;;  (add-hook 'rustic-mode-hook rustic-mode-hook))
+;;;;(use-package counsel
+;;;;  :bind(("M-x" . counsel-M-x))
 ;;
-;;(defun rustic-mode-hook ()
-;;  (when buffer-file-name
-;;    (setq-local buffer-save-without-query t)))
-
+;;;; Programming Configs
+;;;; Global tabs into two spaces unless otherwise specified
+;;(setq indent-tabs-mode nil)
+;;(setq tab-width 2)
+;;;;
+;;;;(use-package rustic
+;;;;  :config
+;;;;  (setq rustic-indent-offset 2)
+;;;;  (setq rustic-format-on-save t)
+;;;;  (add-hook 'rustic-mode-hook rustic-mode-hook))
+;;;;
+;;;;(defun rustic-mode-hook ()
+;;;;  (when buffer-file-name
+;;;;    (setq-local buffer-save-without-query t)))
+;;
 (use-package rust-mode
   :config
   (setq rust-indent-offset 2)
   (setq rust-format-on-save nil))
 
-(use-package haskell-mode
-  :config
-  (setq haskell-indent-mode t)
-  (setq haskell-indent-offset 2))
-	
-(setq js-indent-level 2)
-(setq js-format-on-save t)
+;;(use-package haskell-mode
+;;  :config
+;;  (setq haskell-indent-mode t)
+;;  (setq haskell-indent-offset 2))
+;;
+(use-package markdown-mode
+  :mode ("README\\.md\\'" . gfm-mode))
+
+(use-package yaml-mode)
+
+(use-package nix-mode
+  :mode "\\.nix\\'")
+
+;;(setq js-indent-level 2)
+;;(setq js-format-on-save t)
+;;
 
 ;;Keybindings for lambda and forall
 (global-set-key (kbd "M-l") "λ")
 (global-set-key (kbd "M-;") "∀")
-
-(use-package magit)
-
-(use-package lsp-mode)
-
-(setq load-path (cons "/home/sammy/repos/work/lean/lean4/lean4-mode" load-path))
-(setq lean4-mode-required-packages '(dash f flycheck lsp-mode magit-section s))
-(require 'lean4-mode)
-(setq lean4-info-mode t)
-
-(global-set-key (kbd "S-SPC") #'company-complete)
-
-;; Org mode -------------------------------------------------
-(defun org-mode-setup ()
-  (org-indent-mode)
-  (visual-line-mode 1)
-  (font-lock-add-keywords 'org-mode
-                          '(("^ *\\([-]\\) "
-                             (0 (prog1 () (compose-region (match-beginning 1) (match-end 1) "•")))))))
-  
+;;
+;;(use-package magit)
+;;
+;;(use-package lsp-mode)
+;;
+(use-package lean4-mode
+  :straight (lean4-mode :type git :host github :repo "leanprover/lean4-mode")
+  ;; to defer loading the package until required
+  :commands (lean4-mode))
+;;
+;;(global-set-key (kbd "S-SPC") #'company-complete)
+;;;;(evil-define-key 'normal org-mode-map (kbd "<tab>") #'org-cycle)
+;;
+;;;; Org mode -------------------------------------------------
+;;(defun org-mode-setup ()
+;;  (org-indent-mode)
+;;  (visual-line-mode 1)
+;;  (font-lock-add-keywords 'org-mode
+;;                          '(("^ *\\([-]\\) "
+;;                             (0 (prog1 () (compose-region (match-beginning 1) (match-end 1) "•")))))))
+;;  
 (use-package org
-  :hook (org-mode . org-mode-setup)
+;;  :hook (org-mode . org-mode-setup)
   :config
   (setq org-ellipsis " ⬎"))
-
+;;
 (use-package org-bullets
   :after org
   :hook (org-mode . org-bullets-mode)
@@ -309,23 +355,3 @@
 ;;                (org-level-7 . 1.1)
 ;;                (org-level-8 . 1.1)))
 ;;  (set-face-attribute (car face) nil :font "Cantarell" :weight 'regular :height (cdr face)))
-
-(custom-set-variables
- ;; custom-set-variables was added by Custom.
- ;; If you edit it by hand, you could mess it up, so be careful.
- ;; Your init file should contain only one such instance.
- ;; If there is more than one, they won't work right.
- '(doom-modeline-bar-width 4)
- '(doom-modeline-window-width-limit 70)
- '(helm-completion-style 'emacs)
- '(lsp-headerline-breadcrumb-enable t)
- '(markdown-list-indent-width 2)
- '(package-selected-packages
-	  '(project haskell-mode magit js-mode lean4-mode company-lean lean-mode rainbow-delimiters ace-window which-key use-package typescript-mode tern spaceline smooth-scrolling rustic rust-mode neotree lsp-ui js2-mode ivy helm-rg helm-projectile general flycheck evil-org evil-escape eglot doom-themes doom-modeline company-lsp command-log-mode anzu))
- '(which-key-popup-type 'minibuffer))
-(custom-set-faces
- ;; custom-set-faces was added by Custom.
- ;; If you edit it by hand, you could mess it up, so be careful.
- ;; Your init file should contain only one such instance.
- ;; If there is more than one, they won't work right.
- )
