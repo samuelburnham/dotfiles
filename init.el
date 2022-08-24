@@ -38,7 +38,10 @@
 (tool-bar-mode -1)          ; Disable the toolbar
 (tooltip-mode -1)           ; Disable tooltips
 (menu-bar-mode -1)          ; Disable the menu bar
-;;(set-fringe-mode 10)      ; Give some breathing room on the edges
+;;(set-fringe-mode nil)      ; Give some breathing room on the edges
+
+;; Set up the visible bell
+(setq visible-bell t)
 
 ;; Add columns and line numbers
 (column-number-mode)
@@ -73,15 +76,14 @@
 ;; TODO: figure out best way to autosave
 ;; Don't use #filename#, it's cluttered
 ;; Other configs
-;;(setq make-backup-files t
-;;      auto-save-default t
-;;      backup-directory-alist
-;;      `(("." . "~/.emacs-auto-saves"))
-;;      delete-old-versions t
-;;      kept-new-versions 6
-;;      kept-old-versions 2
-;;      version-control t)
-;;
+(setq make-backup-files t
+      auto-save-default t
+      backup-directory-alist
+      `(("." . "~/.emacs-auto-saves"))
+      delete-old-versions t
+      kept-new-versions 2
+      kept-old-versions 2
+      version-control t)
 
 (desktop-save-mode t)
 (savehist-mode t)
@@ -260,20 +262,62 @@
   (setq which-key-idle-delay 0.3))
 
 ;; All The Icons
-(use-package all-the-icons)
+;; Requires fonts: `M-x all-the-icons-install-fonts`
+(use-package all-the-icons
+  :if (display-graphic-p))
 
 (use-package doom-modeline
   :init (doom-modeline-mode 1)
-  :custom ((doom-modeline-height 10)))
+  :custom ((doom-modeline-height 15)))
 
-;; TODO
 (use-package rainbow-delimiters
   :hook (prog-mode . rainbow-delimiters-mode))
 ;;
 ;;;;(use-package counsel
 ;;;;  :bind(("M-x" . counsel-M-x))
 ;;
+
+;; Shell configs
+
+(defun efs/configure-eshell ()
+  ;; Save command history when commands are entered
+  (add-hook 'eshell-pre-command-hook 'eshell-save-some-history)
+
+  ;; Truncate buffer for performance
+  (add-to-list 'eshell-output-filter-functions 'eshell-truncate-buffer)
+
+  ;; Bind some useful keys for evil-mode
+  (evil-define-key '(normal insert visual) eshell-mode-map (kbd "C-r") 'counsel-esh-history)
+  (evil-define-key '(normal insert visual) eshell-mode-map (kbd "<home>") 'eshell-bol)
+  (evil-normalize-keymaps)
+
+  (setq eshell-history-size         10000
+        eshell-buffer-maximum-lines 10000
+        eshell-hist-ignoredups t
+        eshell-scroll-to-bottom-on-input t))
+
+(use-package eshell-git-prompt)
+
+(use-package eshell
+  :hook (eshell-first-time-mode . efs/configure-eshell)
+  :config
+
+  (with-eval-after-load 'esh-opt
+    (setq eshell-destroy-buffer-when-process-dies t)
+    (setq eshell-visual-commands '("htop" "zsh" "vim")))
+
+  (eshell-git-prompt-use-theme 'powerline))
+
+;;(use-package vterm)
+
+;;(use-package direnv
+;; :config
+;; (direnv-mode))
+
+(use-package sudo-edit)
+
 ;;;; Programming Configs
+
 ;;;; Global tabs into two spaces unless otherwise specified
 ;;(setq indent-tabs-mode nil)
 ;;(setq tab-width 2)
@@ -314,6 +358,7 @@
 (global-set-key (kbd "M-l") "λ")
 (global-set-key (kbd "M-;") "∀")
 ;;
+;;TODO
 ;;(use-package magit)
 ;;
 ;;(use-package lsp-mode)
