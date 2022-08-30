@@ -105,40 +105,43 @@
   :states '(normal visual insert emacs)
   :prefix "SPC"
   :non-normal-prefix "M-SPC"
-;;;;  "/"   '(helm-projectile-rg :which-key "ripgrep")
   "TAB" '(switch-to-previous-buffer :which-key "previous buffer")
   "SPC" '(helm-M-x :which-key "M-x")
   "y" '(helm-show-kill-ring :which-key "Show kill ring")
-;;;;  "pf"  '(helm-projectile-find-file :which-key "find files")
-;;;;  "pp"  '(helm-projectile-switch-project :which-key "switch project")
-;;;;  "pb"  '(helm-projectile-switch-to-buffer :which-key "switch buffer")
-;;;;  "pr"  '(helm-show-kill-ring :which-key "show kill ring")
-;; Buffers
-  "bb"  '(helm-mini :which-key "buffers list, enter name to create new")
+  ;; Buffers
+  "b"   '(:which-key "buffer")
+  "bb"  '(helm-mini :which-key "buffers list")
   "bd"  '(kill-current-buffer :which-key "kill current buffer")
-;;;;  ;; Window
+  ;; Window
+  "w"   '(:which-key "window")
   "wl"  '(windmove-right :which-key "move right")
   "wh"  '(windmove-left :which-key "move left")
   "wk"  '(windmove-up :which-key "move up")
   "wj"  '(windmove-down :which-key "move bottom")
   "w/"  '(split-window-right :which-key "split right")
   "w-"  '(split-window-below :which-key "split bottom")
-;;;;  "wr"  '(ace-window :which-key "rotate windows")
+  "wa"  '(ace-window :which-key "select window")
   "ws"  '(ace-swap-window :which-key "swap windows")
   "wx"  '(delete-window :which-key "delete window")
+  "q"   '(:which-key "quit")
   "qz"  '(delete-frame :which-key "delete frame")
   "qq"  '(kill-emacs :which-key "quit")
-;;  ;; Magit TODO
-;;  ;; "ga" = git add
-;;  ;; "gc" = git commit
-;;  ;; etc
-;;;;  ;; NeoTree
-;;;;  ;;"ft"  '(neotree-toggle :which-key "toggle neotree")
-;;  ;;"br"  '(rename-current-buffer-file :which-key "rename current buffer file")
-;;;;  ;; Org
-;;;;  ;; Others
-;;;;  "at"  '(eshell :which-key "open shell")
-  "af"  '(make-frame :which-key "new frame")
+  ;; Magit
+  "g"   '(:which-key "git")
+  "gs"  '(magit-status :which-key "git status")
+  ;; Add something new
+  "a"   '(:which-key "add")
+  "at"  '(eshell :which-key "shell")
+  "af"  '(make-frame :which-key "frame")
+  ;; NeoTree
+  ;;"ft"  '(neotree-toggle :which-key "toggle neotree")
+  ;; Org
+  ;; Projectil
+  ;; "pf"  '(helm-projectile-find-file :which-key "find files")
+  ;; "pp"  '(helm-projectile-switch-project :which-key "switch project")
+  ;; "pb"  '(helm-projectile-switch-to-buffer :which-key "switch buffer")
+  ;; "pr"  '(helm-show-kill-ring :which-key "show kill ring")
+  ;;  "/"   '(helm-projectile-rg :which-key "ripgrep")
 ))
 ;;
 
@@ -147,14 +150,20 @@
   (interactive)
   (switch-to-buffer (other-buffer)))
 
-;;;; Vim Evil mode
+;; Vim Evil mode
 (use-package evil
   :init
   (setq evil-want-integration t)
+  (setq evil-want-keybinding nil)
   (setq evil-want-C-i-jump nil)
   :config
   (evil-mode 1))
-;;
+
+(use-package evil-collection
+  :after evil
+  :config
+  (evil-collection-init))
+
 ;;;; Delete without register, "DD" deletes line
 ;;;;(evil-define-operator evil-delete-without-register (beg end type yank-handler)
 ;;;;  (interactive "<R><y>")
@@ -162,17 +171,15 @@
 ;;;;(define-key evil-normal-state-map (kbd "D") 'evil-delete-without-register)
 ;;;;(define-key evil-visual-state-map (kbd "D") 'evil-delete-without-register)
 ;;
-;;;; Do something similar with 'evil-change "C-w" change without register/kill ring
+;;;; Do something similar with 'evil-change "C-w" or "x" change without register/kill ring
 ;;;;(define-key evil-visual-state-map (kbd "c") 'evil-delete-without-register)
 ;;
 ;;;; Use visual line motions, allowing scroll within wrapped lines
 ;;;;(evil-global-set-key 'motion "j" 'evil-next-visual-line)
 ;;;;(evil-global-set-key 'motion "k" 'evil-previous-visual-line)
-;;
-;;;; (evil-set-initial-state
-;;;;(use-package evil-collection)
-;;
-;;
+
+
+
 ;; Keep cursor in place when scrolling
 (setq scroll-preserve-screen-position 1)
 ;;
@@ -272,10 +279,11 @@
 
 (use-package rainbow-delimiters
   :hook (prog-mode . rainbow-delimiters-mode))
-;;
-;;;;(use-package counsel
-;;;;  :bind(("M-x" . counsel-M-x))
-;;
+
+;; TODO
+;;(use-package counsel
+;;  :bind(("M-x" . counsel-M-x))
+
 
 ;; Shell configs
 
@@ -310,9 +318,9 @@
 
 ;;(use-package vterm)
 
-;;(use-package direnv
-;; :config
-;; (direnv-mode))
+(use-package direnv
+ :config
+ (direnv-mode))
 
 (use-package sudo-edit)
 
@@ -358,8 +366,7 @@
 (global-set-key (kbd "M-l") "λ")
 (global-set-key (kbd "M-;") "∀")
 ;;
-;;TODO
-;;(use-package magit)
+(use-package magit)
 ;;
 ;;(use-package lsp-mode)
 ;;
