@@ -1,14 +1,3 @@
-;; Initialize package sources
-;;(require 'package)
-;;
-;;(setq package-archives '(("melpa" . "https://melpa.org/packages/")
-;;                         ("org" . "https://orgmode.org/elpa/")
-;;                         ("elpa" . "https://elpa.gnu.org/packages/")))
-;;
-;;(package-initialize)
-;;(unless package-archive-contents
-;; (package-refresh-contents))
-
 ;; Enable straight.el
 (defvar bootstrap-version)
 (let ((bootstrap-file
@@ -22,10 +11,6 @@
       (goto-char (point-max))
       (eval-print-last-sexp)))
   (load bootstrap-file nil 'nomessage))
-
-;; Initialize use-package on non-Linux platforms
-;;(unless (package-installed-p 'use-package)
-;;   (package-install 'use-package))
 
 (straight-use-package 'use-package)
 (setq straight-use-package-by-default t)
@@ -74,7 +59,6 @@
 (global-set-key (kbd "<escape>") 'keyboard-escape-quit)
 
 ;; TODO: figure out best way to autosave
-;; Don't use #filename#, it's cluttered
 ;; Other configs
 (setq make-backup-files t
       auto-save-default t
@@ -92,55 +76,91 @@
 ;; Auto reload buffer when changed on disk
 (global-auto-revert-mode t)
 
-;; TODO fix kill-emacs error
-;;(setq kill-emacs-hook nil)
-;; For some reason org-babel is getting added to kill-emacs-hook
-;; May have something to do with running emacs from terminal instead of Gnome (which I can't do with home-manager for some reason)
-;; Old value (org-babel caused errors)
-;; (savehist-autosave org-babel-remove-temporary-stable-directory org-babel-remove-temporary-directory lsp--global-teardown recentf-save-list bookmark-exit-hook-internal tramp-archive-cleanup-hash tramp-dump-connection-properties straight--delete-stderr-file)
-
-;;;; Custom keybinding
+;; Custom keybindings
+;; NOTE: Pressing "C-u" before SPC will modify some of these to have special behavior
+;; E.g. C-u SPC r b allows for custom arguments
+;; TODO: Figure out how to make "M-SPC" emulate "C-u" instead of non-normal-prefix,
+;; which I never use
 (use-package general
-  :config (general-define-key
-  :states '(normal visual insert emacs)
+  :config
+  (general-evil-setup t)
+  (general-define-key
+   :states '(motion normal visual insert emacs)
+  :keymaps 'override
   :prefix "SPC"
   :non-normal-prefix "M-SPC"
-  "TAB" '(switch-to-previous-buffer :which-key "previous buffer")
-  "SPC" '(helm-M-x :which-key "M-x")
-  "y" '(helm-show-kill-ring :which-key "Show kill ring")
+  "TAB"   '(switch-to-previous-buffer :which-key "previous buffer")
+  "SPC"   '(execute-extended-command :which-key "M-x")
+  "y"     '(browse-kill-ring :which-key "show kill ring")
+  ;; Find file
+  "f"     '(find-file :which-key "find file")
   ;; Buffers
-  "b"   '(:which-key "buffer")
-  "bb"  '(helm-mini :which-key "buffers list")
-  "bd"  '(kill-current-buffer :which-key "kill current buffer")
+  "b"     '(switch-to-buffer :which-key "switch buffer")
+  "x"     '(kill-current-buffer :which-key "kill current buffer")
+  ;; Dired
+  "d"     '(dired-jump :which-key "dired")
+  ;; Add new element
+  "a"     '(:which-key "add")
+  "at"    '(eshell :which-key "shell")
+  "af"    '(make-frame :which-key "frame")
+  ;; Evaluate Elisp
+  "e"     '(:which-key "eval Elisp")
+  "er"    '(eval-region :which-key "eval highlighted region")
+  "eb"    '(eval-buffer :which-key "eval buffer")
+  ;; Command log mode
+  "c"     '(:which-key "command log")
+  "cl"    '(command-log-mode :which-key "toggle command-log-mode")
+  "cb"    '(clm/toggle-command-log-buffer :which-key "toggle clm buffer")
   ;; Window
-  "w"   '(:which-key "window")
-  "wl"  '(windmove-right :which-key "move right")
-  "wh"  '(windmove-left :which-key "move left")
-  "wk"  '(windmove-up :which-key "move up")
-  "wj"  '(windmove-down :which-key "move bottom")
-  "w/"  '(split-window-right :which-key "split right")
-  "w-"  '(split-window-below :which-key "split bottom")
-  "wa"  '(ace-window :which-key "select window")
-  "ws"  '(ace-swap-window :which-key "swap windows")
-  "wx"  '(delete-window :which-key "delete window")
-  "q"   '(:which-key "quit")
-  "qz"  '(delete-frame :which-key "delete frame")
-  "qq"  '(kill-emacs :which-key "quit")
+  "w"     '(:which-key "window")
+  "wl"    '(windmove-right :which-key "move right")
+  "wh"    '(windmove-left :which-key "move left")
+  "wk"    '(windmove-up :which-key "move up")
+  "wj"    '(windmove-down :which-key "move bottom")
+  "w/"    '(split-window-right :which-key "split right")
+  "w-"    '(split-window-below :which-key "split bottom")
+  "wa"    '(ace-window :which-key "select window")
+  "ws"    '(ace-swap-window :which-key "swap windows")
+  "wx"    '(delete-window :which-key "delete window")
+  "q"     '(:which-key "quit")
+  "qz"    '(delete-frame :which-key "delete frame")
+  ;; Popups
+  "p"     '(:which-key "popups")
+  "pt"    '(popper-toggle-type :which-key "toggle type")
+  "pc"    '(popper-cycle :which-key "cycle")
+  "p TAB"  '(popper-toggle-latest :which-key "toggle latest")
+  ;; This kills the Emacs server as well, which I rarely want
+  ;; Maybe re-enable once I get autosave working
+  ;;"qq"    '(kill-emacs :which-key "quit")
   ;; Magit
-  "g"   '(:which-key "git")
-  "gs"  '(magit-status :which-key "git status")
-  ;; Add something new
-  "a"   '(:which-key "add")
-  "at"  '(eshell :which-key "shell")
-  "af"  '(make-frame :which-key "frame")
-  ;; NeoTree
-  ;;"ft"  '(neotree-toggle :which-key "toggle neotree")
+  "g"    '(magit-status :which-key "magit status")
+  ;; LSP
+  "l"     '(:which-key "LSP")
+  ;; TODO: Get LSP to start automatically when entering a Rust buffer
+  "ls"  '(lsp :which-key "Start LSP")
+  "la"  '(lsp-execute-code-action :which-key "execute")
+  "lr"  '(lsp-rename :which-key "rename")
+  "lq"  '(lsp-restart :which-key "restart")
+  "lQ"  '(lsp-workspace-restart :which-key "restart all")
+  "ll"  '(flycheck-list-errors :which-key "flycheck")
+  ;; Rust
+  ;; C-c C-k to kill compilation, change to something more ergonomic
+  "r"     '(:which-key "Rust")
+  "ra"    '(rustic-run-shell-command :which-key "any command")
+  "r TAB" '(rustic-recompile :which-key "recompile")
+  "rs"  '(lsp-rust-analyzer-status :which-key "status")
+  "rk"  '(rustic-cargo-check :which-key "check")
+  "rb"  '(rustic-cargo-build :which-key "build")
+  "rr"  '(rustic-cargo-run :which-key "run")
+  "rt"  '(rustic-cargo-test :which-key "test")
+  "rT"  '(rustic-cargo-current-test :which-key "this test")
+  "rf"  '(rustic-cargo-fmt :which-key "format")
+  "rc"  '(rustic-cargo-clippy :which-key "clippy")
   ;; Org
-  ;; Projectil
+  ;; Projectile
   ;; "pf"  '(helm-projectile-find-file :which-key "find files")
   ;; "pp"  '(helm-projectile-switch-project :which-key "switch project")
   ;; "pb"  '(helm-projectile-switch-to-buffer :which-key "switch buffer")
-  ;; "pr"  '(helm-show-kill-ring :which-key "show kill ring")
   ;;  "/"   '(helm-projectile-rg :which-key "ripgrep")
 ))
 ;;
@@ -151,6 +171,8 @@
   (switch-to-buffer (other-buffer)))
 
 ;; Vim Evil mode
+;; TODO: disable q as macro definer
+;; https://github.com/noctuid/evil-guide
 (use-package evil
   :init
   (setq evil-want-integration t)
@@ -161,8 +183,72 @@
 
 (use-package evil-collection
   :after evil
+  ;; Not sure if needed
+  :custom (evil-collection-setup-minibuffer t)
+  :config (evil-collection-init))
+
+;; TODO: make the completion window browsable with evil keys
+;; https://www.masteringemacs.org/article/understanding-minibuffer-completion
+(fido-vertical-mode t)
+(setq completions-detailed t)
+(setq completion-cycle-threshold 5)
+
+;; Manage popup windows
+(use-package popper
+  :init
+  (setq popper-reference-buffers
+        '("\\*Messages\\*"
+          "Output\\*$"
+	  "\\*Warnings\\*"
+          "\\*Async Shell Command\\*"
+          help-mode
+	  "^\\*eshell.*\\*$" eshell-mode
+          compilation-mode ; currently not working for rustic-compilation, so it's set separately
+	  rustic-compilation-mode))
+  (popper-mode t)
+  (popper-echo-mode t) ; For echo area hints
+  :config (setq popper-display-control nil)) 
+
+;;(setq popper-group-function #'popper-group-by-project) ; project.el projects
+;;(setq popper-group-function #'popper-group-by-perspective) ; group by perspective
+;; Does above works with perspective-el package or some builtin one?
+(use-package shackle
+  :init (setq shackle-mode t))
+  ;;:config
+  ;;(setq shackle-rules '("\\`\\*rustic.*?\\*\\'" :regexp t :align 'below)))
+;; Shackle rules not working
+;; Edit magit
+
+;; Dired
+(use-package dired
+  :straight (:type built-in)
+  :hook (dired-mode . dired-hide-details-mode)
+  :commands (dired dired-jump)
+  :bind
+;;  (
+;;   :map evil-motion-state-map
+;;	 ;;evil-forward-sentence-begin
+;;	 (")" nil))
   :config
-  (evil-collection-init))
+  (put 'dired-find-alternate-file 'disabled nil)
+  (evil-collection-define-key 'normal 'dired-mode-map
+    "h" 'dired-up-directory
+    "l" 'dired-find-file))
+
+(use-package dired-single
+  :commands (dired dired-jump))
+
+(use-package all-the-icons-dired
+  :hook (dired-mode . all-the-icons-dired-mode)
+  :config (setq all-the-icons-dired-monochrome nil))
+
+(use-package dired-git-info
+  :config
+  (setq dgi-auto-hide-details-p nil)
+  :bind (:map dired-mode-map
+              (")" . dired-git-info-mode)))
+  
+;;TODO: diredfl?
 
 ;;;; Delete without register, "DD" deletes line
 ;;;;(evil-define-operator evil-delete-without-register (beg end type yank-handler)
@@ -178,80 +264,53 @@
 ;;;;(evil-global-set-key 'motion "j" 'evil-next-visual-line)
 ;;;;(evil-global-set-key 'motion "k" 'evil-previous-visual-line)
 
-
-
 ;; Keep cursor in place when scrolling
 (setq scroll-preserve-screen-position 1)
 ;;
 ;;;; Below scroll commands are backwards, e.g. "scroll-down" actually scrolls up
-(defun scroll-half-page-down ()
-  "scroll down half the page"
-  (interactive)
-  (scroll-down (/ (window-body-height) 2)))
-
 (defun scroll-half-page-up ()
   "scroll up half the page"
   (interactive)
+  ;; "scroll-down" actually scrolls up
+  (scroll-down (/ (window-body-height) 2)))
+
+(defun scroll-half-page-down ()
+  "scroll down half the page"
+  (interactive)
+  ;; "scroll-up" actually scrolls down
   (scroll-up (/ (window-body-height) 2)))
 
-;; Set C-k/C-j to scroll up/down
-(global-set-key (kbd "C-k") 'scroll-half-page-down)
-(global-set-key (kbd "C-j") 'scroll-half-page-up)
+;; Page up/down
+;; Only works in normal mode
+(global-set-key (kbd "C-k") 'scroll-half-page-up)
+(global-set-key (kbd "C-j") 'scroll-half-page-down)
 
-;; scroll window up/down by one line
-(global-set-key (kbd "M-k") 'scroll-down-line)
-(global-set-key (kbd "M-j") 'scroll-up-line)
+;; Single-line scroll up/down
+;; Only works in normal mode
+(global-set-key (kbd "M-k") 'evil-scroll-line-up)
+(global-set-key (kbd "M-j") 'evil-scroll-line-down)
+
+;; Restore C-y as paste keybinding for insert mode, minibuffer, etc
+;; Why does '(normal insert) give errors?
+(evil-global-set-key 'normal (kbd "C-y") 'yank)
+(evil-global-set-key 'insert (kbd "C-y") 'yank)
+
+;; TODO set C-e as another prefix command or nil
+;;(global-unset-key (kbd "C-e"))
+;;(define-prefix-command 'extra)
+;;(evil-global-set-key '(normal insert) (kbd "C-e") 'extra)
 
 (use-package ace-window)
 
-;; TODO
-(use-package helm
-  :config
-  (helm-mode 1))
 
-;;;; Helm
-;;(use-package helm
-;;  :init
-;;  (setq helm-M-x-fuzzy-match t
-;;        helm-mode-fuzzy-match t
-;;        helm-buffers-fuzzy-matching t
-;;        helm-recentf-fuzzy-match t
-;;        helm-locate-fuzzy-match t
-;;        helm-semantic-fuzzy-match t
-;;        helm-imenu-fuzzy-match t
-;;        helm-completion-in-region-fuzzy-match t
-;;        helm-candidate-number-list 80
-;;        (setq helm-split-window-inside-p t
-;;        helm-move-to-line-cycle-in-source t
-;;        helm-echo-input-in-header-line t
-;;        helm-autoresize-max-height 0
-;;       helm-autoresize-min-height 20)
-;;  :config
-;;  (helm-mode 1))
-;;
-;;
-;;;;(use-package ivy
-;;;;  :diminish
-;;;;  :bind (("C-s" . swiper)
-;;;;         :map ivy-minibuffer-map
-;;;;         ("TAB" . ivy-alt-done)       
-;;;;         ("C-l" . ivy-alt-done)
-;;;;         ("C-j" . ivy-next-line)
-;;;;         ("C-k" . ivy-previous-line)
-;;;;         :map ivy-switch-buffer-map
-;;;;         ("C-k" . ivy-previous-line)
-;;;;         ("C-l" . ivy-done)
-;;;;         ("C-d" . ivy-switch-buffer-kill)
-;;;;         :map ivy-reverse-i-search-map
-;;;;         ("C-k" . ivy-previous-line)
-;;;;         ("C-d" . ivy-reverse-i-search-kill))
-;;;;  :config
-;;;;  (ivy-mode 1))
-;;
-;;;;(use-package command-log-mode)
-;;
+(use-package browse-kill-ring)
+
+;; TODO: see useful commands and keybinds from System Crafters
+(use-package command-log-mode)
 
 ;; TODO
+;; Fix which-key not showing all options, maybe by changing height or below cmd
+;;(advice-remove #'fit-window-to-buffer #'doom-modeline-redisplay)
 ;; which-key-setup-minibuffer
 ;; Which Key
 ;;(use-package which-key)
@@ -264,8 +323,12 @@
   ;;(setq which-key-idle-delay 0.5))
 ;;
 (use-package which-key
-  :init (which-key-mode)
+  :init 
+  (setq which-key-separator " ")
+  (setq which-key-prefix-prefix "+")
+  :diminish which-key-mode
   :config
+  (which-key-mode)
   (setq which-key-idle-delay 0.3))
 
 ;; All The Icons
@@ -280,13 +343,8 @@
 (use-package rainbow-delimiters
   :hook (prog-mode . rainbow-delimiters-mode))
 
-;; TODO
-;;(use-package counsel
-;;  :bind(("M-x" . counsel-M-x))
-
 
 ;; Shell configs
-
 (defun efs/configure-eshell ()
   ;; Save command history when commands are entered
   (add-hook 'eshell-pre-command-hook 'eshell-save-some-history)
@@ -318,9 +376,10 @@
 
 ;;(use-package vterm)
 
-(use-package direnv
- :config
- (direnv-mode))
+;;(use-package direnv
+;; :config
+;; (direnv-mode)
+;; (add-to-list 'warning-suppress-types '(direnv)))
 
 (use-package sudo-edit)
 
@@ -330,20 +389,106 @@
 ;;(setq indent-tabs-mode nil)
 ;;(setq tab-width 2)
 ;;;;
-;;;;(use-package rustic
-;;;;  :config
-;;;;  (setq rustic-indent-offset 2)
-;;;;  (setq rustic-format-on-save t)
-;;;;  (add-hook 'rustic-mode-hook rustic-mode-hook))
-;;;;
-;;;;(defun rustic-mode-hook ()
-;;;;  (when buffer-file-name
-;;;;    (setq-local buffer-save-without-query t)))
-;;
-(use-package rust-mode
+
+;; TODO: Experiment with the below packages, see
+;; https://robert.kra.hn/posts/rust-emacs-setup/
+(use-package lsp-mode
+  :commands lsp
+  :custom
+  (lsp-rust-analyzer-cargo-watch-command "clippy")
+  (lsp-eldoc-render-all t)
+  (lsp-idle-delay 0.6)
+  ;; enable / disable the hints as you prefer:
+  (lsp-rust-analyzer-server-display-inlay-hints t)
+  (lsp-rust-analyzer-display-lifetime-elision-hints-enable "skip_trivial")
+  (lsp-rust-analyzer-display-chaining-hints t)
+  (lsp-rust-analyzer-display-lifetime-elision-hints-use-parameter-names t)
+  (lsp-rust-analyzer-display-closure-return-type-hints t)
+  (lsp-rust-analyzer-display-parameter-hints t)
+  (lsp-rust-analyzer-display-reborrow-hints t)
   :config
-  (setq rust-indent-offset 2)
-  (setq rust-format-on-save nil))
+  (add-hook 'lsp-mode-hook 'lsp-ui-mode))
+  ;; Attempt to fix lsp-mode not auto-starting for Rust files
+  ;;:hook
+  ;;(rustic-mode . lsp))
+
+(use-package lsp-ui
+  :commands lsp-ui-mode
+  :custom
+  (lsp-ui-peek-always-show t)
+  (lsp-ui-sideline-show-hover t)
+  (lsp-ui-doc-enable t))
+
+(use-package company
+  :bind
+  (:map company-active-map
+	("C-n". company-select-next)
+	("C-p". company-select-previous)
+	("M-<". company-select-first)
+	("M->". company-select-last)
+	("<tab>". tab-indent-or-complete)
+	("TAB". tab-indent-or-complete)))
+
+(use-package yasnippet
+  :config
+  (yas-reload-all)
+  (add-hook 'prog-mode-hook 'yas-minor-mode)
+  (add-hook 'text-mode-hook 'yas-minor-mode))
+
+(defun company-yasnippet-or-completion ()
+  (interactive)
+  (or (do-yas-expand)
+      (company-complete-common)))
+
+(defun check-expansion ()
+  (save-excursion
+    (if (looking-at "\\_>") t
+      (backward-char 1)
+      (if (looking-at "\\.") t
+        (backward-char 1)
+        (if (looking-at "::") t nil)))))
+
+(defun do-yas-expand ()
+  (let ((yas/fallback-behavior 'return-nil))
+    (yas/expand)))
+
+(defun tab-indent-or-complete ()
+  (interactive)
+  (if (minibufferp)
+      (minibuffer-complete)
+    (if (or (not yas/minor-mode)
+            (null (do-yas-expand)))
+        (if (check-expansion)
+            (company-complete-common)
+          (indent-for-tab-command)))))
+
+;; TODO: Make flycheck use clippy, ideally from rustic config
+;; If I get straight.el errors, see this:
+;; https://github.com/radian-software/straight.el#integration-with-flycheck
+(use-package flycheck)
+
+(use-package exec-path-from-shell
+  :init (exec-path-from-shell-initialize))
+
+(use-package rustic
+  :config
+  (setq rustic-indent-offset 2)
+  (setq rustic-format-on-save t)
+
+  ;; Edit default arguments to cargo test or clippy
+  (setq rustic-default-test-arguments "--release --workspace -- --include-ignored --nocapture")
+  (setq rustic-default-test-arguments "--workspace --benches --tests --all-features")
+  ;; These get stored dynamically from the output of prior C-u commands
+  ;; TODO: Disable the above
+  ;;(setq rustic-cargo-build-arguments "")
+  ;; Or, set them on the fly with "C-u" prefix (see general)
+
+  (add-hook 'rustic-mode-hook rustic-mode-hook))
+
+(defun rustic-mode-hook ()
+  (when buffer-file-name
+    (setq-local buffer-save-without-query t))
+  (add-hook 'before-save-hook 'lsp-format-buffer nil t))
 
 ;;(use-package haskell-mode
 ;;  :config
@@ -368,7 +513,6 @@
 ;;
 (use-package magit)
 ;;
-;;(use-package lsp-mode)
 ;;
 (use-package lean4-mode
   :straight (lean4-mode :type git :host github :repo "leanprover/lean4-mode")
@@ -379,15 +523,15 @@
 ;;;;(evil-define-key 'normal org-mode-map (kbd "<tab>") #'org-cycle)
 ;;
 ;;;; Org mode -------------------------------------------------
-;;(defun org-mode-setup ()
-;;  (org-indent-mode)
-;;  (visual-line-mode 1)
-;;  (font-lock-add-keywords 'org-mode
-;;                          '(("^ *\\([-]\\) "
-;;                             (0 (prog1 () (compose-region (match-beginning 1) (match-end 1) "•")))))))
-;;  
+(defun org-mode-setup ()
+  (org-indent-mode)
+  (visual-line-mode 1)
+  (font-lock-add-keywords 'org-mode
+                          '(("^ *\\([-]\\) "
+                             (0 (prog1 () (compose-region (match-beginning 1) (match-end 1) "•")))))))
+  
 (use-package org
-;;  :hook (org-mode . org-mode-setup)
+  :hook (org-mode . org-mode-setup)
   :config
   (setq org-ellipsis " ⬎"))
 ;;
