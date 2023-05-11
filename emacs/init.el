@@ -31,8 +31,14 @@
 ;; Add columns and line numbers
 (column-number-mode)
 (global-display-line-numbers-mode t)
+(setq display-line-numbers-type 'relative)
+;;(global-display-line-numbers-mode t)
 ;;(global-whitespace-mode -1)
 ;;(setq display-line-numbers 'relative)
+
+;; Split popups vertically by default
+(setq split-height-threshold nil)
+(setq split-width-threshold 0)
 
 ;; Disable line numbers for some modes
 ;;(dolist (mode '(org-mode-hook
@@ -50,10 +56,10 @@
   (smooth-scrolling-mode 1))
 
 ;; Theme
-(use-package doom-themes
+(use-package solarized-theme
   :config
-  (load-theme 'doom-one t)
-  (doom-themes-org-config))
+  (load-theme 'solarized-dark-high-contrast t)
+  (setq solarized-scale-org-headlines nil))
 
 ;; Make ESC quit prompts
 (global-set-key (kbd "<escape>") 'keyboard-escape-quit)
@@ -95,8 +101,9 @@
   ;; Find file
   "f"     '(find-file :which-key "find file")
   ;; Buffers
-  "b"     '(switch-to-buffer :which-key "switch buffer")
-  "x"     '(kill-current-buffer :which-key "kill current buffer")
+  "b"     '(:which-key "buffers")
+  "bb"     '(switch-to-buffer :which-key "buffer list")
+  "bx"     '(kill-current-buffer :which-key "kill current buffer")
   ;; Dired
   "d"     '(dired-jump :which-key "dired")
   ;; Add new element
@@ -109,7 +116,6 @@
   "eb"    '(eval-buffer :which-key "eval buffer")
   ;; Command log mode
   "c"     '(:which-key "command log")
-  "cl"    '(command-log-mode :which-key "toggle command-log-mode")
   "cb"    '(clm/toggle-command-log-buffer :which-key "toggle clm buffer")
   ;; Window
   "w"     '(:which-key "window")
@@ -260,14 +266,14 @@
 ;;;; Do something similar with 'evil-change "C-w" or "x" change without register/kill ring
 ;;;;(define-key evil-visual-state-map (kbd "c") 'evil-delete-without-register)
 ;;
-;;;; Use visual line motions, allowing scroll within wrapped lines
-;;;;(evil-global-set-key 'motion "j" 'evil-next-visual-line)
-;;;;(evil-global-set-key 'motion "k" 'evil-previous-visual-line)
+;; Use visual line motions, allowing scroll within wrapped lines
+(evil-global-set-key 'motion "j" 'evil-next-visual-line)
+(evil-global-set-key 'motion "k" 'evil-previous-visual-line)
 
 ;; Keep cursor in place when scrolling
 (setq scroll-preserve-screen-position 1)
 ;;
-;;;; Below scroll commands are backwards, e.g. "scroll-down" actually scrolls up
+;;;; Below scroll commands are backwards, e.g. "scrol-down" actually scrolls up
 (defun scroll-half-page-up ()
   "scroll up half the page"
   (interactive)
@@ -306,7 +312,9 @@
 (use-package browse-kill-ring)
 
 ;; TODO: see useful commands and keybinds from System Crafters
-(use-package command-log-mode)
+(use-package command-log-mode
+  :config
+  (global-command-log-mode t))
 
 ;; TODO
 ;; Fix which-key not showing all options, maybe by changing height or below cmd
@@ -376,10 +384,12 @@
 
 ;;(use-package vterm)
 
-;;(use-package direnv
-;; :config
-;; (direnv-mode)
-;; (add-to-list 'warning-suppress-types '(direnv)))
+(use-package envrc
+  :config
+  (envrc-global-mode))
+
+(with-eval-after-load 'envrc
+  (define-key envrc-mode-map (kbd "C-c e") 'envrc-command-map))
 
 (use-package sudo-edit)
 
@@ -476,12 +486,15 @@
   (setq rustic-format-on-save t)
 
   ;; Edit default arguments to cargo test or clippy
-  (setq rustic-default-test-arguments "--release --workspace -- --include-ignored --nocapture")
-  (setq rustic-default-test-arguments "--workspace --benches --tests --all-features")
+  ;;(setq rustic-default-test-arguments "--release --workspace -- --include-ignored --nocapture")
+  (setq rustic-default-test-arguments "")
   ;; These get stored dynamically from the output of prior C-u commands
   ;; TODO: Disable the above
   ;;(setq rustic-cargo-build-arguments "")
   ;; Or, set them on the fly with "C-u" prefix (see general)
+
+  ;; Customize rustic-compilation colors for solarized-dark theme
+  (setq rustic-ansi-faces ["black" "red3" "green3" "yellow3" "cyan4" "magenta3" "cyan3" "white"])
 
   (add-hook 'rustic-mode-hook rustic-mode-hook))
 
@@ -524,8 +537,8 @@
 ;;
 ;;;; Org mode -------------------------------------------------
 (defun org-mode-setup ()
+  (visual-line-mode)
   (org-indent-mode)
-  (visual-line-mode 1)
   (font-lock-add-keywords 'org-mode
                           '(("^ *\\([-]\\) "
                              (0 (prog1 () (compose-region (match-beginning 1) (match-end 1) "•")))))))
