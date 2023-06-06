@@ -1,3 +1,9 @@
+;; TODO
+;; Figure out how keymaps work
+;; Disable the evil-repeat keybinding as . or rebind it to something more sane
+;; Figure out how general works and integrate the above into it
+;; Set a keybinding for LSP go-to definition in Rust
+;; Get LSP to start automatically in Rust
 ;; Enable straight.el
 (defvar bootstrap-version)
 (let ((bootstrap-file
@@ -32,6 +38,8 @@
 (column-number-mode)
 (global-display-line-numbers-mode t)
 (setq display-line-numbers-type 'relative)
+;; Not sure what the below does, failed attempt to decrease fringe next to line numbers
+;;(setq-default fringes-outside-margins t)
 ;;(global-display-line-numbers-mode t)
 ;;(global-whitespace-mode -1)
 ;;(setq display-line-numbers 'relative)
@@ -55,11 +63,12 @@
   :config
   (smooth-scrolling-mode 1))
 
-;; Theme
-(use-package solarized-theme
+(use-package doom-themes
   :config
-  (load-theme 'solarized-dark-high-contrast t)
-  (setq solarized-scale-org-headlines nil))
+  ;; Disables italic line numbers
+  (setq doom-themes-enable-italic nil)
+  (load-theme 'doom-solarized-dark-high-contrast t)
+  (doom-themes-org-config))
 
 ;; Make ESC quit prompts
 (global-set-key (kbd "<escape>") 'keyboard-escape-quit)
@@ -149,6 +158,9 @@
   "lq"  '(lsp-restart :which-key "restart")
   "lQ"  '(lsp-workspace-restart :which-key "restart all")
   "ll"  '(flycheck-list-errors :which-key "flycheck")
+  "lf"  '(xref-find-references :which-key "list references")
+  "ld"  '(xref-find-definitions :which-key "go to def")
+  "lb"  '(xref-go-back :which-key "go back")
   ;; Rust
   ;; C-c C-k to kill compilation, change to something more ergonomic
   "r"     '(:which-key "Rust")
@@ -199,6 +211,7 @@
 (setq completions-detailed t)
 (setq completion-cycle-threshold 5)
 
+;; TODO: Disable "qq" setting kbd macro
 ;; Manage popup windows
 (use-package popper
   :init
@@ -255,7 +268,8 @@
               (")" . dired-git-info-mode)))
   
 ;;TODO: diredfl?
-
+;;TODO: Disable the C-z key, which switches from evil state to normal emacs (e.g. no insert/normal mode)
+;;(evil-global-set-key 'normal "" `evil-emacs-state)
 ;;;; Delete without register, "DD" deletes line
 ;;;;(evil-define-operator evil-delete-without-register (beg end type yank-handler)
 ;;;;  (interactive "<R><y>")
@@ -296,6 +310,7 @@
 (global-set-key (kbd "M-k") 'evil-scroll-line-up)
 (global-set-key (kbd "M-j") 'evil-scroll-line-down)
 
+(global-set-key (kbd "C-h M-k") 'describe-keymap)
 ;; Restore C-y as paste keybinding for insert mode, minibuffer, etc
 ;; Why does '(normal insert) give errors?
 (evil-global-set-key 'normal (kbd "C-y") 'yank)
@@ -306,8 +321,9 @@
 ;;(define-prefix-command 'extra)
 ;;(evil-global-set-key '(normal insert) (kbd "C-e") 'extra)
 
-(use-package ace-window)
+;; TODO: Disable
 
+(use-package ace-window)
 
 (use-package browse-kill-ring)
 
@@ -384,12 +400,12 @@
 
 ;;(use-package vterm)
 
-(use-package envrc
-  :config
-  (envrc-global-mode))
-
-(with-eval-after-load 'envrc
-  (define-key envrc-mode-map (kbd "C-c e") 'envrc-command-map))
+;;(use-package envrc
+;;  :config
+;;  (envrc-global-mode))
+;;
+;;(with-eval-after-load 'envrc
+;;  (define-key envrc-mode-map (kbd "C-c e") 'envrc-command-map))
 
 (use-package sudo-edit)
 
@@ -409,6 +425,7 @@
   (lsp-eldoc-render-all t)
   (lsp-idle-delay 0.6)
   ;; enable / disable the hints as you prefer:
+  ;; TODO: Get rid of the annoying hints on the side of the window
   (lsp-rust-analyzer-server-display-inlay-hints t)
   (lsp-rust-analyzer-display-lifetime-elision-hints-enable "skip_trivial")
   (lsp-rust-analyzer-display-chaining-hints t)
@@ -418,6 +435,8 @@
   (lsp-rust-analyzer-display-reborrow-hints t)
   :config
   (add-hook 'lsp-mode-hook 'lsp-ui-mode))
+  ;;(add-hook 'rustic-mode-hook #'lsp)
+  (add-hook 'rust-mode-hook #'lsp)
   ;; Attempt to fix lsp-mode not auto-starting for Rust files
   ;;:hook
   ;;(rustic-mode . lsp))
@@ -483,18 +502,20 @@
 (use-package rustic
   :config
   (setq rustic-indent-offset 2)
-  (setq rustic-format-on-save t)
+  (setq rustic-format-on-save nil)
 
-  ;; Edit default arguments to cargo test or clippy
+  ;; Edit default arguments
   ;;(setq rustic-default-test-arguments "--release --workspace -- --include-ignored --nocapture")
-  (setq rustic-default-test-arguments "")
+  (setq rustic-default-test-arguments "--release --workspace")
+  (setq rustic-cargo-check-arguments "--benches --tests")
+  (setq rustic-cargo-clippy-arguments "--all -- -D warnings")
   ;; These get stored dynamically from the output of prior C-u commands
   ;; TODO: Disable the above
   ;;(setq rustic-cargo-build-arguments "")
   ;; Or, set them on the fly with "C-u" prefix (see general)
 
   ;; Customize rustic-compilation colors for solarized-dark theme
-  (setq rustic-ansi-faces ["black" "red3" "green3" "yellow3" "cyan4" "magenta3" "cyan3" "white"])
+  ;;(setq rustic-ansi-faces ["black" "red3" "green3" "yellow3" "cyan4" "magenta3" "cyan3" "white"])
 
   (add-hook 'rustic-mode-hook rustic-mode-hook))
 
