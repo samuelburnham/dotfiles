@@ -1,46 +1,29 @@
-{ config, pkgs, ... }: 
+{ config, pkgs, ... }:
 
 {
-  programs.home-manager.enable = true;
-  programs.direnv = {
-    enable = true;
-
-    nix-direnv = {
-      enable = true;
-    };
-  };
   home.username = "sam";
   home.homeDirectory = "/home/sam";
-  home.stateVersion = "21.11";
-  home.packages = with pkgs; [
-    gnome.gnome-terminal
-    gnome.gnome-tweaks
-    gnome.gnome-shell-extensions
-    gnomeExtensions.appindicator
-    emacs
-    chromium
-    slack
-    tdesktop
-    thunderbird
-    spotify
-    discord
-    zulip
-    neovim
-    xclip
-    ghc
-    stack
-    cabal-install
-    rustup
-    bash
-    zsh
-    cabextract
-    vulkan-tools
-    ffmpeg
-    r128gain
-    deadbeef
-    atomicparsley
-    vscode
-    elan
-  ];
-}
 
+  home.packages = with pkgs; [
+    zulip
+    spotify
+    cowsay
+  ];
+
+  # basic configuration of git, please change to your own
+  programs.git = {
+    enable = true;
+    userName = "samuelburnham";
+    userEmail = "45365069+samuelburnham@users.noreply.github.com";
+  };
+
+  # This value determines the home Manager release that your
+  # configuration is compatible with. This helps avoid breakage
+  # when a new home Manager release introduces backwards
+  # incompatible changes.
+  #
+  # You can update home Manager without changing this value. See
+  # the home Manager release notes for a list of state version
+  # changes in each release.
+  home.stateVersion = "25.05";
+}
