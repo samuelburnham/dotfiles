@@ -1,21 +1,64 @@
-{ config, pkgs, ... }:
+# Main home-manager config
+{ config, pkgs, inputs, ... }:
 
 {
+  imports = [
+    ./nvim.nix
+    ./gnome.nix
+    ./alias.nix
+    ./firefox.nix
+  ];
+
   home.username = "sam";
   home.homeDirectory = "/home/sam";
 
   home.packages = with pkgs; [
+    bitwarden-desktop
+    vscode
     zulip
     spotify
+    obsidian
+    telegram-desktop
+    discord
+    slack
+    google-chrome
+    todoist-electron
+    libreoffice
     cowsay
+    wl-clipboard
+    # TODO: Switch to nixpkgs-unstable once v2.15 comes out (currently on master only)
+    # This fixes the broken Freon Gnome extension when `nvme-cli` is enabled
+    nvme-cli
+    restic
+    nerd-fonts.fira-code
+    nerd-fonts.jetbrains-mono
   ];
 
-  # basic configuration of git, please change to your own
+  programs.bash = {
+    enable = true;
+  };
+
+  programs.direnv = {
+    enable = true;
+    enableBashIntegration = true;
+    nix-direnv.enable = true;
+  };
+
   programs.git = {
     enable = true;
     userName = "samuelburnham";
     userEmail = "45365069+samuelburnham@users.noreply.github.com";
+    extraConfig = {
+      init.defaultBranch = "main";
+    };
   };
+
+  # Enable Hyprland
+  #programs.kitty.enable = true; # required for the default Hyprland config
+  #wayland.windowManager.hyprland.enable = true; # enable Hyprland
+
+  # Optional, hint Electron apps to use Wayland:
+  # home.sessionVariables.NIXOS_OZONE_WL = "1";
 
   # This value determines the home Manager release that your
   # configuration is compatible with. This helps avoid breakage

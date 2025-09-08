@@ -23,6 +23,28 @@
     efiSysMountPoint = "/boot";
   };
 
+  # Fix suspend issue on Gigabyte B650I motherboard
+  # Note: If DDR5 RAM XMP profile is enabled, resuming from suspend may fail
+  # I noticed this once in the NixOS boot log: `bug: bad page state in process swapper`
+  # If so, lower the MHz in BIOS incrementally and test. E.g. 6400Mhz might fail, but 6000Mhz should work
+  boot.kernelParams = [ "acpi_osi=\"!Windows 2015\"" ];
+  systemd.services.disable-xh00-wakeup = {
+    description = "Disable XH00 device wakeup";
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = pkgs.writeShellScript "disable-xh00-wakeup" ''
+        if grep -q "XH00.*enabled" /proc/acpi/wakeup; then
+          echo "XH00" > /proc/acpi/wakeup
+        fi
+      '';
+    };
+    wantedBy = [ "multi-user.target" ];
+  };
+  # Enable wakeup for Kinesis keyboard
+  services.udev.extraRules = ''
+    ACTION=="add", SUBSYSTEM=="usb", ATTRS{idVendor}=="29ea", ATTRS{idProduct}=="0362", ATTR{power/wakeup}="enabled"
+'';
+
   networking.hostName = "nixos"; # Define your hostname.
   #networking.wireless.enable = true;  # Enables wireless support via wpa_supplicant.
 
@@ -57,6 +79,8 @@
   # Enable the GNOME Desktop Environment.
   services.xserver.displayManager.gdm.enable = true;
   services.xserver.desktopManager.gnome.enable = true;
+
+  services.gnome.games.enable = false;
 
   # Configure keymap in X11
   services.xserver.xkb = {
@@ -96,23 +120,61 @@
     ];
   };
 
-  # Install firefox.
-  programs.firefox.enable = true;
-
   # Allow unfree packages
   nixpkgs.config.allowUnfree = true;
 
   nix.settings.experimental-features = [ "nix-command" "flakes" ];
 
+  nix.settings.trusted-users = [ "sam" ];
+
+  #programs.firefox.enable = true; # Managed by home-manager
+
   # List packages installed in system profile. To search, run:
   # $ nix search wget
   environment.systemPackages = with pkgs; [
-    vim # Do not forget to add an editor to edit configuration.nix! The Nano editor is also installed by default.
+    # vim # Do not forget to add an editor to edit configuration.nix! The Nano editor is also installed by default.
     wget
     git
   ];
 
-  environment.variables.EDITOR = "vim";
+  environment.gnome.excludePackages = with pkgs; [ 
+    gnome-calendar
+    epiphany
+    geary
+    gnome-music
+  ];
+
+  programs.neovim = {
+    enable = true;
+    viAlias = true;
+    vimAlias = false;
+  };
+
+  environment.variables.EDITOR = "nvim";
+
+  # Increase `sudo` timeout to 30 minutes
+  security.sudo.extraConfig = "Defaults timestamp_timeout=30";
+
+  # Automated backups to external drive
+  systemd.services.restic-backup = {
+    enable = true; #TODO: Is this needed?
+    description = "Restic backup";
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = ''
+        ${pkgs.restic}/bin/restic backup /home/sam/dotfiles --password-file /home/sam/restic-password
+      '';
+      EnvironmentFile = "/home/sam/restic.env";
+    };
+  };
+  systemd.timers.restic-backup = {
+    description= "Run backup daily";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "*:0/5";
+      Persistent = true;
+    };
+  };
 
   # Some programs need SUID wrappers, can be configured further or are
   # started in user sessions.
