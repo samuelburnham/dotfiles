@@ -19,6 +19,11 @@
       };
       # about:config settings
       settings = {
+        # Remember each site's zoom setting
+        # On desktop ultrawide, text-heavy sites need at least 120% zoom
+        # I don't know how to scale just the page to 120% by default,
+        # but at least this way I only have to zoom in once per page and FF remembers it
+        "browser.zoom.siteSpecific" = true;
         "browser.startup.homepage" = "about:home";
 
         # Disable irritating first-run stuff

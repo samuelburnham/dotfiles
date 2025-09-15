@@ -77,14 +77,14 @@
       };
       "org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0" = {
         binding = "<Control><Alt>t";
-	command = "kgx";
+	command = "ghostty";
 	name = "Launch Terminal";
       };
       "org/gnome/shell" = {
         favorite-apps = [
-          "Console.desktop"
-	  "Nautilus.desktop"
+          "com.mitchellh.ghostty.desktop"
           "firefox.desktop"
+          "org.gnome.Nautilus.desktop"
           "zulip.desktop"
           "spotify.desktop"
         ];

@@ -32,10 +32,25 @@
     restic
     nerd-fonts.fira-code
     nerd-fonts.jetbrains-mono
+    gh
   ];
 
   programs.bash = {
     enable = true;
+  };
+
+  programs.ghostty = {
+    enable = true;
+    settings = {
+      theme = "Builtin Solarized Dark";
+    };
+  };
+
+  programs.starship = {
+    enable = true;
+    enableBashIntegration = true;
+    #settings = {
+    #};
   };
 
   programs.direnv = {
