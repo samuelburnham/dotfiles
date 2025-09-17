@@ -3,8 +3,7 @@
   pkgs,
   lib,
   ...
-}:
-{
+}: {
   programs.firefox = {
     enable = true;
     policies = {
@@ -14,8 +13,8 @@
     profiles.sam = {
       search = {
         force = true;
-	default = "ddg";
-	order = [ "ddg" "google" ];
+        default = "ddg";
+        order = ["ddg" "google"];
       };
       # about:config settings
       settings = {
@@ -39,16 +38,16 @@
         "startup.homepage_override_url" = "";
         "trailhead.firstrun.didSeeAboutWelcome" = true;
         "browser.bookmarks.restore_default_bookmarks" = false;
-	# TODO: Prevent the "Import bookmarks" button from showing up in the toolbar
+        # TODO: Prevent the "Import bookmarks" button from showing up in the toolbar
         "browser.bookmarks.addedImportButton" = true;
 
-      	# Disable about:config warning
-      	"browser.aboutConfig.showWarning" = false;
-	"browser.tabs.loadBookmarksInTabs" = true;
+        # Disable about:config warning
+        "browser.aboutConfig.showWarning" = false;
+        "browser.tabs.loadBookmarksInTabs" = true;
         # Disable save passwords and autofill
-      	"signon.rememberSignons" = false;
-      	"extensions.formautofill.addresses.enabled" = false;
-      	"extensions.formautofill.creditCards.enabled" = false;
+        "signon.rememberSignons" = false;
+        "extensions.formautofill.addresses.enabled" = false;
+        "extensions.formautofill.creditCards.enabled" = false;
 
         # Don't ask for download dir
         "browser.download.useDownloadDir" = false; # Doesn't seem to stick after login
@@ -74,26 +73,12 @@
         ] (_: 1);
 
         # Harden
-	# These don't seem to stick after login
+        # These don't seem to stick after login
         "privacy.trackingprotection.enabled" = true;
-        "dom.security.https_only_mode" = true; 
+        "dom.security.https_only_mode" = true;
 
-	# TODO: Customize layout of top bar and extensions
+        # TODO: Customize layout of top bar and extensions
       };
     };
   };
-
-  # Set Firefox as the default web browser
-  xdg.mimeApps = {
-    enable = true;
-    defaultApplications = {
-      "text/html" = [ "firefox.desktop" ];
-      "text/xml" = [ "firefox.desktop" ];
-      "x-scheme-handler/http" = [ "firefox.desktop" ];
-      "x-scheme-handler/https" = [ "firefox.desktop" ];
-      "application/pdf" = [ "firefox.desktop" ];
-    };
-  };
-
-  #environment.sessionVariables.DEFAULT_BROWSER = "${pkgs.firefox}/bin/firefox";
 }

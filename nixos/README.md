@@ -2,23 +2,14 @@
 
 ## Install
 
-- Run `nix-shell -p vim` to get a shell with `vim`
+- Run `nix-shell -p vim -p git`
 
-- Run `sudo vim /etc/nixos/configuration.nix` and install `git` and `vim`, and enable flakes:
+- Run `sudo vim /etc/nixos/configuration.nix` to enable flakes:
 ```
 # /etc/nixos/configuration.nix
 
 # ...
-
   nix.settings.experimental-features = [ "nix-command" "flakes" ];
-  environment.systemPackages = with pkgs; [
-      # Flakes clones its dependencies through the git command,
-      # so git must be installed first
-      git
-      vim
-      wget
-  ];
-
 # ...
 ```
 - Confirm the settings with `sudo nixos-rebuild switch`

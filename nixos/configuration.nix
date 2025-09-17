@@ -23,7 +23,7 @@
     efiSysMountPoint = "/boot";
   };
 
-  # Fix suspend issue on Gigabyte B650I motherboard
+  # Fixes suspend issue on Gigabyte B650I motherboard
   # Note: If DDR5 RAM XMP profile is enabled, resuming from suspend may fail
   # I noticed this once in the NixOS boot log: `bug: bad page state in process swapper`
   # If so, lower the MHz in BIOS incrementally and test. E.g. 6400Mhz might fail, but 6000Mhz should work
@@ -74,6 +74,7 @@
   };
 
   # Enable the X11 windowing system.
+  # Not set explicitly but Wayland is enabled and the default
   services.xserver.enable = true;
 
   # Enable the GNOME Desktop Environment.
@@ -90,6 +91,8 @@
 
   # Enable CUPS to print documents.
   services.printing.enable = true;
+  # Had to remove and re-add printer in Gnome settings after adding the driver
+  services.printing.drivers = [ pkgs.brlaser ];
 
   # Enable sound with pipewire.
   services.pulseaudio.enable = false;

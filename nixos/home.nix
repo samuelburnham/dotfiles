@@ -1,7 +1,5 @@
 # Main home-manager config
-{ config, pkgs, inputs, ... }:
-
-{
+{pkgs, ...}: {
   imports = [
     ./nvim.nix
     ./gnome.nix
@@ -33,12 +31,15 @@
     nerd-fonts.fira-code
     nerd-fonts.jetbrains-mono
     gh
+    htop
+    imagemagick
   ];
 
   programs.bash = {
     enable = true;
   };
 
+  # Get file with searchable terminal output using Ctrl+Shift+J
   programs.ghostty = {
     enable = true;
     settings = {
@@ -46,6 +47,7 @@
     };
   };
 
+  # TODO: cd'ing into a Nix flake dir with Direnv enabled often doesn't show the full prompt (e.g. Rust version) till running another command
   programs.starship = {
     enable = true;
     enableBashIntegration = true;
@@ -67,6 +69,26 @@
       init.defaultBranch = "main";
     };
   };
+
+  # Default apps
+  # Firefox for web browser
+  # Loupe for image viewer
+  # Nautilus for file browser
+  xdg.mimeApps = {
+    enable = true;
+    defaultApplications = {
+      "text/html" = ["firefox.desktop"];
+      "text/xml" = ["firefox.desktop"];
+      "x-scheme-handler/http" = ["firefox.desktop"];
+      "x-scheme-handler/https" = ["firefox.desktop"];
+      "application/pdf" = ["firefox.desktop"];
+      "image/png" = ["org.gnome.Loupe.desktop"];
+      "image/jpg" = ["org.gnome.Loupe.desktop"];
+      "image/gif" = ["org.gnome.Loupe.desktop"];
+    };
+  };
+
+  #environment.sessionVariables.DEFAULT_BROWSER = "${pkgs.firefox}/bin/firefox";
 
   # Enable Hyprland
   #programs.kitty.enable = true; # required for the default Hyprland config
