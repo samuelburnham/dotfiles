@@ -1,6 +1,5 @@
 # TODO:
 # File explorer or easy navigation between directories within Nvim
-# Easy switch between open buffers
 # Cycle forward and back between recently opened buffers with Ctrl-I and Ctrl-O (this seems to also undo/redo but works for go-to def)
 # Tmux and coding workflow (smart-splits.nvim and open terminal next to Nvim)
 # Complete leader keybindings for common tasks
@@ -14,8 +13,11 @@
 # Seem Emacs config for more options
 # Enable holding `x` to delete multiple chars
 # Test adding an external plugin and doing some config in Lua
+# Change terminal cursor in insert mode to thin line, same as normal buffer
 {
   pkgs,
+  pkgs-unstable,
+  lib,
   inputs,
   ...
 }: {
@@ -68,28 +70,72 @@
           enable = true;
           setupOpts.signature.enabled = true;
         };
+
+        # TODO: Add https://github.com/nvim-telescope/telescope-fzf-native.nvim if better perf needed
+        # https://github.com/NotAShelf/nvf/blob/9df9d51fd9fc8f9a8fc377f984ea3b7ae796172d/modules/plugins/utility/telescope/telescope.nix#L232-L243
+        telescope = {
+          enable = true;
+          setupOpts = {
+            pickers = {
+              buffers = {
+                sort_mru = true;
+                sort_lastused = true;
+              };
+            };
+          };
+        };
+        # TODO:
+        # Improve icons for git, yellow circle and square is weird
+        filetree.neo-tree = {
+          enable = true;
+          setupOpts = {
+            window = {
+              mappings = {
+                "<space>" = "none";
+              };
+            };
+          };
+        };
+
         # Look into:
-        # nvim-telescope/telescope.nvim (vim.telescope.enable)
         # folke/trouble.nvim
         # nvim-lua/plenary.nvim
         # https://github.com/AndrewRadev/switch.vim
         # https://github.com/andymass/vim-matchup
         # https://github.com/rmagatti/goto-preview
+
         extraPlugins = {
-          # TODO: Lean
-          # https://github.com/Julian/lean.nvim
-          # Doesn't work on Nvim 0.11 yet, use VSCode for Lean dev
-          #lean = {
-          #  package = pkgs.vimPlugins.lean-nvim;
-          #  event = { 'BufReadPre *.lean', 'BufNewFile *.lean' };
-          #  opts = {
-          #    mappings = true;
-          #  };
-          #};
-          #  lualine = {
-          #    package = pkgs.vimPlugins.lualine-nvim;
-          #    setup = "require('lualine').setup {}";
-          #  };
+          # Could use smooth scroll with mouse wheel, see https://github.com/karb94/neoscroll.nvim/issues/50#issuecomment-1160094214
+          neoscroll = {
+            package = pkgs.vimPlugins.neoscroll-nvim;
+            setup = ''
+              neoscroll = require('neoscroll')
+              neoscroll.setup({
+                stop_eof = true,
+                cursor_scrolls_alone = false,
+              })
+              local keymap = {
+                ["<C-S-Up>"] = function() neoscroll.ctrl_u({ duration = 250 }) end;
+                ["<C-S-Down>"] = function() neoscroll.ctrl_d({ duration = 250 }) end;
+                ["<PageUp>"] = function() neoscroll.ctrl_b({ duration = 450 }) end;
+                ["<PageDown>"] = function() neoscroll.ctrl_f({ duration = 450 }) end;
+                ["<C-Up>"] = function() neoscroll.scroll(-0.1, { move_cursor=false; duration = 100 }) end;
+                ["<C-Down>"] = function() neoscroll.scroll(0.1, { move_cursor=false; duration = 100 }) end;
+              }
+              local modes = { 'n', 'v', 'x' }
+              for key, func in pairs(keymap) do
+                vim.keymap.set(modes, key, func)
+              end
+            '';
+          };
+        };
+        lazy.plugins = {
+          "lean.nvim" = {
+            package = pkgs-unstable.vimPlugins.lean-nvim;
+            setupModule = "lean";
+            setupOpts = {mappings = true;};
+            event = ["BufReadPre *.lean" "BufNewFile *.lean"];
+          };
         };
         clipboard = {
           enable = true;
@@ -99,7 +145,10 @@
         utility.undotree = {
           enable = true;
         };
+        # TODO: Save open files, possibly with session management
         #preventJunkFiles = true;
+
+        # Lower case chars will match on upper-case as well
         searchCase = "smart";
 
         # TODO: Test keybindings further, probably rebind swap-buffers: https://github.com/mrjones2014/smart-splits.nvim
@@ -108,42 +157,161 @@
         # Swap buffers with <leader><leader>hjkl
         utility.smart-splits = {
           enable = true;
+          keymaps = {
+            swap_buf_left = "<leader>wh";
+            swap_buf_down = "<leader>wj";
+            swap_buf_up = "<leader>wk";
+            swap_buf_right = "<leader>wl";
+          };
         };
 
         # Leader key
         globals.mapleader = " ";
         keymaps = [
           {
-            # Window management
-            key = "<leader>w";
-            mode = ["n"];
-            action = ":w<CR>";
+            key = "k";
+            mode = ["n" "v" "x"];
+            action = "gk";
+            # Executes command without displaying it on the command line
             silent = true;
-            desc = "Save file";
+            desc = "Scroll up a visual line";
           }
           {
-            # Undo tree
+            key = "j";
+            mode = ["n" "v" "x"];
+            action = "gj";
+            silent = true;
+            desc = "Scroll down a visual line";
+          }
+          {
+            key = "<leader><Tab>";
+            mode = ["n" "v"];
+            action = ":b#<CR>";
+            silent = true;
+            # Description is shown by which-key on the leader popup
+            desc = "Switch to most recent buffer";
+          }
+          {
+            key = "<leader>b";
+            mode = ["n" "v"];
+            action = "";
+            silent = true;
+            desc = "Buffers";
+          }
+          {
+            key = "<leader>bn";
+            mode = ["n" "v"];
+            action = ":enew<CR>";
+            silent = true;
+            desc = "New buffer in this window";
+          }
+          {
+            key = "<leader>b/";
+            mode = ["n" "v"];
+            action = ":vnew<CR>";
+            silent = true;
+            desc = "New buffer split right";
+          }
+          {
+            key = "<leader>b-";
+            mode = ["n" "v"];
+            action = ":new<CR>";
+            silent = true;
+            desc = "New buffer split below";
+          }
+          {
+            # Deletes the buffer, force-deleting if it's a terminal
+            key = "<leader>bd";
+            mode = ["n" "v"];
+            lua = true;
+            action = "
+              function()
+                if vim.bo.buftype == 'terminal' then
+                  vim.cmd('bd!')
+                else
+                  vim.cmd('bd')
+                end
+              end
+            ";
+            silent = true;
+            desc = "Delete buffer";
+          }
+          {
+            key = "<leader>bt";
+            mode = ["n" "v"];
+            action = "<cmd>vsp | terminal<CR>";
+            silent = true;
+            desc = "Open terminal to the right";
+          }
+          {
+            key = "<Esc><Esc>";
+            mode = ["t"];
+            action = "<C-\\><C-n>";
+            silent = true;
+            desc = "Exit terminal mode";
+          }
+          {
+            key = "<leader>w";
+            mode = ["n" "v"];
+            action = "";
+            silent = true;
+            desc = "Windows";
+          }
+          {
+            key = "<leader>w/";
+            mode = ["n" "v"];
+            action = ":vsp<CR>";
+            silent = true;
+            desc = "New window split right";
+          }
+          {
+            key = "<leader>w-";
+            mode = ["n" "v"];
+            action = ":sp<CR>";
+            silent = true;
+            desc = "New window split below";
+          }
+          {
+            key = "<leader>wd";
+            mode = ["n" "v"];
+            action = ":close<CR>";
+            silent = true;
+            desc = "Close window";
+          }
+          {
+            key = "<Esc>";
+            mode = ["n"];
+            action = "<cmd>nohlsearch<CR>";
+            silent = true;
+            desc = "Turn off search highlighting";
+          }
+          {
+            key = "<leader>t";
+            mode = ["n" "v"];
+            action = ":Neotree<CR>";
+            silent = true;
+            desc = "Open filetree";
+          }
+          {
+            key = "<leader>u";
+            mode = ["n"];
+            action = "";
+            silent = true;
+            desc = "Undo Tree";
+          }
+          {
             key = "<leader>ut";
             mode = ["n"];
             action = ":UndotreeToggle<CR>";
             silent = true;
             desc = "Toggle Undo Tree";
           }
-          # Use PgUp/PgDown or <C-f>/<C-b> for large jumps
-          # <C-d>/<C-u> also jumps
           {
-            key = "<C-j>";
-            mode = ["n" "v"];
-            action = "<C-e>";
+            key = "<leader>l";
+            mode = ["n"];
+            action = "";
             silent = true;
-            desc = "Scroll up";
-          }
-          {
-            key = "<C-k>";
-            mode = ["n" "v"];
-            action = "<C-y>";
-            silent = true;
-            desc = "Scroll down";
+            desc = "LSP";
           }
         ];
         # TODO: Set a description for intermediate keybindings, e.g. `<leader>l` is LSP-related commands
@@ -155,7 +323,7 @@
           enable = true;
           formatOnSave = true;
           inlayHints.enable = true;
-          lightbulb.enable = true;
+          lightbulb.enable = false;
           #lspSignature.enable = true;
           lspkind.enable = true;
           #mappings = {
@@ -164,14 +332,32 @@
         };
         languages.nix = {
           enable = true;
-          treesitter.enable = true;
-          #format = {
-          #  enable = true;
-          # };
+          # Breaks indentation of comments and new lines
+          # Disabling along with the tabstop autcmd below means tabbing on newline won't auto-indent to previous line's indent
+          treesitter.enable = false;
+          # Formats using alejandra v4.0.0
+          format = {
+            enable = true;
+          };
           lsp = {
             enable = true;
           };
         };
+        autocmds = [
+          {
+            enable = true;
+            desc = "Tabs into 2 spaces for Nix";
+            event = ["FileType"];
+            pattern = ["nix"];
+            callback = lib.generators.mkLuaInline ''
+              function()
+                vim.opt_local.shiftwidth =  2
+                vim.opt_local.tabstop =  2
+                vim.opt_local.softtabstop =  2
+              end
+            '';
+          }
+        ];
         languages.rust = {
           enable = true;
           treesitter.enable = true;

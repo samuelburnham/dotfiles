@@ -22,7 +22,6 @@
     google-chrome
     todoist-electron
     libreoffice
-    cowsay
     wl-clipboard
     # TODO: Switch to nixpkgs-unstable once v2.15 comes out (currently on master only)
     # This fixes the broken Freon Gnome extension when `nvme-cli` is enabled
@@ -32,7 +31,9 @@
     nerd-fonts.jetbrains-mono
     gh
     htop
+    # Image file utilities
     imagemagick
+    ghostscript
   ];
 
   programs.bash = {

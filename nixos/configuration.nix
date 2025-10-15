@@ -1,14 +1,16 @@
 # Edit this configuration file to define what should be installed on
 # your system.  Help is available in the configuration.nix(5) man page
 # and in the NixOS manual (accessible by running ‘nixos-help’).
-
-{ config, pkgs, inputs, ... }:
-
 {
-  imports =
-    [ # Include the results of the hardware scan.
-      ./hardware-configuration.nix
-    ];
+  config,
+  pkgs,
+  inputs,
+  ...
+}: {
+  imports = [
+    # Include the results of the hardware scan.
+    ./hardware-configuration.nix
+  ];
 
   # Use the Grub2 boot loader with EFI.
   boot.loader.systemd-boot.enable = false;
@@ -16,7 +18,7 @@
     enable = true;
     efiSupport = true;
     useOSProber = true;
-    devices = [ "nodev" ];
+    devices = ["nodev"];
   };
   boot.loader.efi = {
     canTouchEfiVariables = true;
@@ -27,7 +29,7 @@
   # Note: If DDR5 RAM XMP profile is enabled, resuming from suspend may fail
   # I noticed this once in the NixOS boot log: `bug: bad page state in process swapper`
   # If so, lower the MHz in BIOS incrementally and test. E.g. 6400Mhz might fail, but 6000Mhz should work
-  boot.kernelParams = [ "acpi_osi=\"!Windows 2015\"" ];
+  boot.kernelParams = ["acpi_osi=\"!Windows 2015\""];
   systemd.services.disable-xh00-wakeup = {
     description = "Disable XH00 device wakeup";
     serviceConfig = {
@@ -38,12 +40,12 @@
         fi
       '';
     };
-    wantedBy = [ "multi-user.target" ];
+    wantedBy = ["multi-user.target"];
   };
   # Enable wakeup for Kinesis keyboard
   services.udev.extraRules = ''
     ACTION=="add", SUBSYSTEM=="usb", ATTRS{idVendor}=="29ea", ATTRS{idProduct}=="0362", ATTR{power/wakeup}="enabled"
-'';
+  '';
 
   networking.hostName = "nixos"; # Define your hostname.
   #networking.wireless.enable = true;  # Enables wireless support via wpa_supplicant.
@@ -53,7 +55,15 @@
   # networking.proxy.noProxy = "127.0.0.1,localhost,internal.domain";
 
   # Enable networking
-  networking.networkmanager.enable = true;
+  networking.networkmanager = {
+    enable = true;
+    wifi = {
+      # Neither of these solved my problem of Wifi having poor connection for several minutes after resuming from suspend
+      # Solution: use Ethernet
+      scanRandMacAddress = false;
+      powersave = false;
+    };
+  };
 
   # Set your time zone.
   time.timeZone = "America/New_York";
@@ -92,7 +102,7 @@
   # Enable CUPS to print documents.
   services.printing.enable = true;
   # Had to remove and re-add printer in Gnome settings after adding the driver
-  services.printing.drivers = [ pkgs.brlaser ];
+  services.printing.drivers = [pkgs.brlaser];
 
   # Enable sound with pipewire.
   services.pulseaudio.enable = false;
@@ -117,18 +127,18 @@
   users.users.sam = {
     isNormalUser = true;
     description = "Sam";
-    extraGroups = [ "networkmanager" "wheel" ];
+    extraGroups = ["networkmanager" "wheel"];
     packages = with pkgs; [
-    #  thunderbird
+      #  thunderbird
     ];
   };
 
   # Allow unfree packages
   nixpkgs.config.allowUnfree = true;
 
-  nix.settings.experimental-features = [ "nix-command" "flakes" ];
+  nix.settings.experimental-features = ["nix-command" "flakes"];
 
-  nix.settings.trusted-users = [ "sam" ];
+  nix.settings.trusted-users = ["sam"];
 
   #programs.firefox.enable = true; # Managed by home-manager
 
@@ -140,7 +150,7 @@
     git
   ];
 
-  environment.gnome.excludePackages = with pkgs; [ 
+  environment.gnome.excludePackages = with pkgs; [
     gnome-calendar
     epiphany
     geary
@@ -171,8 +181,8 @@
     };
   };
   systemd.timers.restic-backup = {
-    description= "Run backup daily";
-    wantedBy = [ "timers.target" ];
+    description = "Run backup daily";
+    wantedBy = ["timers.target"];
     timerConfig = {
       OnCalendar = "*:0/5";
       Persistent = true;
@@ -205,5 +215,4 @@
   # Before changing this value read the documentation for this option
   # (e.g. man configuration.nix or on https://nixos.org/nixos/options.html).
   system.stateVersion = "25.05"; # Did you read the comment?
-
 }
