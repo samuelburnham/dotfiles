@@ -25,6 +25,8 @@
 # Terminal copy-paste uses system clipboard, `y`/`p` should work
 # The latter works in insert mode as well in both regular and terminal buffer
 #
+# C-I/C-O to cycle forward/backward through open buffers
+#
 # Visual mode
 # Follow which-key for key sequences, it's amazing
 # gU/gu to uppercase or lowercase selection, g~ to toggle case
@@ -42,6 +44,7 @@
     enable = true;
     settings = {
       vim = {
+        options.guicursor = "n-v-c-sm:block,i-ci-ve:ver25,r-cr-o:hor20,t:ver25-blinkon500-blinkoff500-TermCursor";
         vimAlias = true;
 
         # Solarized dark theme
@@ -208,10 +211,14 @@
         utility.smart-splits = {
           enable = true;
           keymaps = {
-            swap_buf_left = "<leader>wh";
-            swap_buf_down = "<leader>wj";
-            swap_buf_up = "<leader>wk";
-            swap_buf_right = "<leader>wl";
+            move_cursor_left = "<C-h>";
+            move_cursor_down = "<C-j>";
+            move_cursor_up = "<C-k>";
+            move_cursor_right = "<C-l>";
+            swap_buf_left = "<leader>wsh";
+            swap_buf_down = "<leader>wsj";
+            swap_buf_up = "<leader>wsk";
+            swap_buf_right = "<leader>wsl";
           };
         };
 
@@ -284,8 +291,13 @@
                 if vim.bo.modified then
                   local choice = vim.fn.confirm(("Save changes to %q?"):format(vim.fn.bufname()), "&Yes\n&No\n&Cancel")
                   if choice == 1 then -- Yes
-                    vim.cmd.write()
+                    local ok, out = pcall(vim.api.nvim_command_output, "write")
                     bd(0)
+                    if ok and out ~= "" then
+                      vim.schedule(function()
+                        vim.api.nvim_echo({{out, "Normal"}}, false, {})
+                      end)
+                    end
                   elseif choice == 2 then -- No
                     bd(0, true)
                   end
@@ -294,7 +306,7 @@
                 end
               end
             '';
-            silent = true;
+            silent = false;
             desc = "Delete buffer";
           }
           {
@@ -306,7 +318,7 @@
                 local bd = require("mini.bufremove").delete(0, true)
               end
             '';
-            silent = true;
+            silent = false;
             desc = "Delete buffer (force)";
           }
           {
@@ -317,7 +329,7 @@
             desc = "Open terminal to the right";
           }
           {
-            key = "<Esc><Esc>";
+            key = "<Esc>";
             mode = ["t"];
             action = "<C-\\><C-n>";
             silent = true;
@@ -386,16 +398,12 @@
             silent = true;
             desc = "LSP";
           }
-          # TODO: Unify the following for window management
-          # Space-w for splits and swapping windows, and closing window
-          # C-hjkl for navigation
-          # <C-w>hjkl for navigation when in terminal mode, but which-key doesn't work
           {
-            key = "<C-w>";
-            mode = ["t"];
-            action = "<C-\\><C-n><C-w>";
+            key = "<leader>ws";
+            mode = ["n"];
+            action = "";
             silent = true;
-            #desc = "Window navigation";
+            desc = "Swap windows";
           }
         ];
         # TODO: Set a description for intermediate keybindings, e.g. `<leader>l` is LSP-related commands
@@ -431,6 +439,7 @@
             enable = true;
           };
         };
+
         autocmds = [
           {
             enable = true;
@@ -445,7 +454,20 @@
               end
             '';
           }
+          {
+            enable = true;
+            desc = "Restore guicursor when switching to terminal";
+            event = ["TermEnter" "BufEnter"];
+            pattern = ["term://*"];
+            # Force Neovim to reapply cursor shape
+            callback = lib.generators.mkLuaInline ''
+              function()
+                vim.cmd("set guicursor& | set guicursor=" .. vim.o.guicursor)
+              end
+            '';
+          }
         ];
+
         languages.rust = {
           enable = true;
           treesitter.enable = true;
