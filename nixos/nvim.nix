@@ -1,19 +1,34 @@
 # TODO:
-# File explorer or easy navigation between directories within Nvim
-# Cycle forward and back between recently opened buffers with Ctrl-I and Ctrl-O (this seems to also undo/redo but works for go-to def)
-# Tmux and coding workflow (smart-splits.nvim and open terminal next to Nvim)
-# Complete leader keybindings for common tasks
+# Test lean.nvim with goto-def, infoview, and hover
 # Recover saved changes via swapfile or similar, but not in an annoying way
 #   Currently `preventJunkFiles = false`, which means a backup `~` is saved to the current dir
 #   Test `vim -r` without junk files to recover progress: https://neovim.io/doc/user/recover.html
-# Test `vim.utility.direnv.enable` to sync Nvim shell env with direnv
-# Fix indentation on new line, might be a Nix/LSP/treesitter issue but also could be an nvf option
+# Test `blink-cmp`
+# Add some functionality borrowed from tmux like session persistence, SSH, and running a Neovim systemd server on startup. See https://kraust.github.io/posts/neovim-is-a-multiplexer/
+# Complete leader keybindings for common tasks (see Emacs config)
+# Test `vim.utility.direnv.enable` to sync Nvim shell env with direnv - not sure it's needed if Nvim is launched from the dev shell dir
 # Add Vim emulation mode to terminal for navigation and search (not sure if possible in Ghostty)
 # Obsidian.nvim or Neorg for note taking and project planning
 # Seem Emacs config for more options
 # Enable holding `x` to delete multiple chars
-# Test adding an external plugin and doing some config in Lua
+# Terminal keybindings
 # Change terminal cursor in insert mode to thin line, same as normal buffer
+# Consider Neovide for GUI experience and to fully decouple from terminal
+# Keep an eye on Ghostty integration with Neovim, such as https://github.com/neovim/neovim/issues/33155 which would fix multiline copy-paste from `:terminal`
+# and probably other bugs like squashed text on window resize
+# awesome-nvf configurations:
+# https://github.com/jack-thesparrow/schrovimger
+# https://github.com/e-v-o-l-v-e/nix-config/blob/main/home/nvf.nix
+#
+# Cheat sheet
+# Terminal copy-paste uses system clipboard, `y`/`p` should work
+# The latter works in insert mode as well in both regular and terminal buffer
+#
+# Visual mode
+# Follow which-key for key sequences, it's amazing
+# gU/gu to uppercase or lowercase selection, g~ to toggle case
+# gc to toggle comment
+# gv to select last visual selection
 {
   pkgs,
   pkgs-unstable,
@@ -68,7 +83,28 @@
         # blink-cmp autocompletion plugion
         autocomplete.blink-cmp = {
           enable = true;
-          setupOpts.signature.enabled = true;
+          setupOpts = {
+            signature.enabled = true;
+            cmdline.enabled = true;
+
+            # Select and accept with `<C-space>`, close with `<C-e>`
+            cmdline.keymap = {
+              preset = "default";
+              # TODO: Tab accept doesn't work, not sure why
+              "<Tab>" = ["show" "accept"];
+              "<C-space>" = ["select_and_accept" "fallback"];
+            };
+            cmdline.completion.list.selection.auto_insert = false;
+            cmdline.completion.list.selection.preselect = true;
+            # If `menu.auto_show` is annoying, can set to false and set Tab to show menu and also accept
+            # `"<Tab>" = ["show_and_insert_or_accept_single" "select_and_accept"];`
+            # But have to wait for blink 1.7, above doesn't work atm
+            cmdline.completion.menu.auto_show = lib.generators.mkLuaInline ''
+              function(ctx)
+                return vim.fn.getcmdtype() == ':'
+              end
+            '';
+          };
         };
 
         # TODO: Add https://github.com/nvim-telescope/telescope-fzf-native.nvim if better perf needed
@@ -85,6 +121,7 @@
           };
         };
         # TODO:
+        # Fix auto-refresh after running git commands from `:terminal`
         # Improve icons for git, yellow circle and square is weird
         filetree.neo-tree = {
           enable = true;
@@ -313,6 +350,17 @@
             silent = true;
             desc = "LSP";
           }
+          # TODO: Unify the following for window management
+          # Space-w for splits and swapping windows, and closing window
+          # C-hjkl for navigation
+          # <C-w>hjkl for navigation when in terminal mode, but which-key doesn't work
+          {
+            key = "<C-w>";
+            mode = ["t"];
+            action = "<C-\\><C-n><C-w>";
+            silent = true;
+            #desc = "Window navigation";
+          }
         ];
         # TODO: Set a description for intermediate keybindings, e.g. `<leader>l` is LSP-related commands
         # Enable which-key for keybinding descriptions
@@ -367,7 +415,7 @@
             enable = true;
           };
         };
-        # TODO: Modeline icons and general nerd font support (already installed in home.nix)
+        # TODO: Modeline icons and general nerd font support (already installed in home.nix and supported by Ghostty)
         #utility.icon-picker.enable = true;
       };
     };

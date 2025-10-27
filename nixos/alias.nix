@@ -1,16 +1,10 @@
-{
-  pkgs,
-  ...
-}:
-let
+{pkgs, ...}: let
   rebuild = pkgs.writeShellApplication {
     name = "rebuild";
-    text = "sudo nixos-rebuild switch";
+    text = "nixos-rebuild switch --use-remote-sudo";
   };
-in
-{
+in {
   home.packages = [
     rebuild
   ];
 }
-

@@ -23,6 +23,7 @@
     todoist-electron
     libreoffice
     wl-clipboard
+    ripgrep
     # TODO: Switch to nixpkgs-unstable once v2.15 comes out (currently on master only)
     # This fixes the broken Freon Gnome extension when `nvme-cli` is enabled
     nvme-cli
