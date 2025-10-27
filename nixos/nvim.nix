@@ -1,4 +1,5 @@
 # TODO:
+# Set up projects for each Neovim instance like VSCode or tmux, where each neovim is its own project with saved state
 # Test lean.nvim with goto-def, infoview, and hover
 # Recover saved changes via swapfile or similar, but not in an annoying way
 #   Currently `preventJunkFiles = false`, which means a backup `~` is saved to the current dir
@@ -135,6 +136,7 @@
         };
 
         # Look into:
+        # folke/noice.nvim
         # folke/trouble.nvim
         # nvim-lua/plenary.nvim
         # https://github.com/AndrewRadev/switch.vim
@@ -163,6 +165,17 @@
               for key, func in pairs(keymap) do
                 vim.keymap.set(modes, key, func)
               end
+            '';
+          };
+          flatten = {
+            package = pkgs-unstable.vimPlugins.flatten-nvim;
+            setup = ''
+              require('flatten').setup({
+                window = {
+                  open = "current",
+                  focus = "last",
+                },
+              })
             '';
           };
         };
@@ -200,6 +213,10 @@
             swap_buf_up = "<leader>wk";
             swap_buf_right = "<leader>wl";
           };
+        };
+
+        mini.bufremove = {
+          enable = true;
         };
 
         # Leader key
@@ -257,21 +274,40 @@
             desc = "New buffer split below";
           }
           {
-            # Deletes the buffer, force-deleting if it's a terminal
+            # Deletes the buffer, prompting to save if changed
             key = "<leader>bd";
             mode = ["n" "v"];
             lua = true;
-            action = "
+            action = ''
               function()
-                if vim.bo.buftype == 'terminal' then
-                  vim.cmd('bd!')
+                local bd = require("mini.bufremove").delete
+                if vim.bo.modified then
+                  local choice = vim.fn.confirm(("Save changes to %q?"):format(vim.fn.bufname()), "&Yes\n&No\n&Cancel")
+                  if choice == 1 then -- Yes
+                    vim.cmd.write()
+                    bd(0)
+                  elseif choice == 2 then -- No
+                    bd(0, true)
+                  end
                 else
-                  vim.cmd('bd')
+                  bd(0)
                 end
               end
-            ";
+            '';
             silent = true;
             desc = "Delete buffer";
+          }
+          {
+            key = "<leader>bD";
+            mode = ["n" "v"];
+            lua = true;
+            action = ''
+              function()
+                local bd = require("mini.bufremove").delete(0, true)
+              end
+            '';
+            silent = true;
+            desc = "Delete buffer (force)";
           }
           {
             key = "<leader>bt";
@@ -366,6 +402,10 @@
         # Enable which-key for keybinding descriptions
         binds.whichKey = {
           enable = true;
+        };
+        binds.hardtime-nvim = {
+          enable = false;
+          #enable = true;
         };
         lsp = {
           enable = true;
