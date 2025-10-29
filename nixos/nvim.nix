@@ -456,13 +456,27 @@
           }
           {
             enable = true;
-            desc = "Restore guicursor when switching to terminal";
-            event = ["TermEnter" "BufEnter"];
-            pattern = ["term://*"];
-            # Force Neovim to reapply cursor shape
+            desc = "Enter insert mode when starting terminal";
+            event = ["TermOpen"];
             callback = lib.generators.mkLuaInline ''
               function()
-                vim.cmd("set guicursor& | set guicursor=" .. vim.o.guicursor)
+                vim.cmd("startinsert")
+              end
+            '';
+          }
+          {
+            enable = true;
+            desc = "Enter insert mode and restore guicursor in terminal after Git buffer";
+            event = ["BufLeave"];
+            pattern = ["*COMMIT_EDITMSG" "*git-rebase-todo"];
+            callback = lib.generators.mkLuaInline ''
+              function()
+                vim.schedule(function()
+                  if vim.bo.buftype == 'terminal' then
+                    vim.cmd("set guicursor& | set guicursor=" .. vim.o.guicursor)
+                    vim.cmd("startinsert")
+                  end
+                end)
               end
             '';
           }
