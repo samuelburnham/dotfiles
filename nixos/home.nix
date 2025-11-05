@@ -1,5 +1,9 @@
 # Main home-manager config
-{pkgs, ...}: {
+{
+  pkgs,
+  pkgs-unstable,
+  ...
+}: {
   imports = [
     ./nvim.nix
     ./gnome.nix
@@ -24,9 +28,11 @@
     libreoffice
     wl-clipboard
     ripgrep
-    # TODO: Switch to nixpkgs-unstable once v2.15 comes out (currently on master only)
-    # This fixes the broken Freon Gnome extension when `nvme-cli` is enabled
-    nvme-cli
+    lm_sensors
+    smartmontools
+    # TODO: Freon Gnome extension is broken when `nvme-cli` is enabled
+    # https://github.com/UshakovVasilii/gnome-shell-extension-freon/issues/293
+    pkgs-unstable.nvme-cli # Currently v2.15
     restic
     nerd-fonts.fira-code
     nerd-fonts.jetbrains-mono
@@ -39,6 +45,10 @@
 
   programs.bash = {
     enable = true;
+    # Changes backup files `ls` color to dim cyan, otherwise they are invisible with solarized dark theme
+    bashrcExtra = ''
+      LS_COLORS=$(echo "$LS_COLORS" | sed 's/=00;90/=36;2/g')
+    '';
   };
 
   # Get file with searchable terminal output using Ctrl+Shift+J
@@ -46,6 +56,8 @@
     enable = true;
     settings = {
       theme = "Builtin Solarized Dark";
+      shell-integration-features = "no-cursor";
+      cursor-style = "bar";
     };
   };
 

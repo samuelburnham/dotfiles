@@ -1,6 +1,6 @@
 # TODO:
 # Set up projects for each Neovim instance like VSCode or tmux, where each neovim is its own project with saved state
-# Test lean.nvim with goto-def, infoview, and hover
+# Test lean.nvim with goto-def, infoview, and hover, `,` local leader key maybe should be unified with `<leader>l`
 # Recover saved changes via swapfile or similar, but not in an annoying way
 #   Currently `preventJunkFiles = false`, which means a backup `~` is saved to the current dir
 #   Test `vim -r` without junk files to recover progress: https://neovim.io/doc/user/recover.html
@@ -8,12 +8,8 @@
 # Add some functionality borrowed from tmux like session persistence, SSH, and running a Neovim systemd server on startup. See https://kraust.github.io/posts/neovim-is-a-multiplexer/
 # Complete leader keybindings for common tasks (see Emacs config)
 # Test `vim.utility.direnv.enable` to sync Nvim shell env with direnv - not sure it's needed if Nvim is launched from the dev shell dir
-# Add Vim emulation mode to terminal for navigation and search (not sure if possible in Ghostty)
-# Obsidian.nvim or Neorg for note taking and project planning
+# Obsidian.nvim or Neorg for note taking and project planning, with https://github.com/MeanderingProgrammer/render-markdown.nvim
 # Seem Emacs config for more options
-# Enable holding `x` to delete multiple chars
-# Terminal keybindings
-# Change terminal cursor in insert mode to thin line, same as normal buffer
 # Consider Neovide for GUI experience and to fully decouple from terminal
 # Keep an eye on Ghostty integration with Neovim, such as https://github.com/neovim/neovim/issues/33155 which would fix multiline copy-paste from `:terminal`
 # and probably other bugs like squashed text on window resize
@@ -21,16 +17,26 @@
 # https://github.com/jack-thesparrow/schrovimger
 # https://github.com/e-v-o-l-v-e/nix-config/blob/main/home/nvf.nix
 #
+# Look into:
+# folke/trouble.nvim
+# nvim-lua/plenary.nvim
+# https://github.com/smoka7/multicursors.nvim
+# https://github.com/NeogitOrg/neogit
+#
 # Cheat sheet
 # Terminal copy-paste uses system clipboard, `y`/`p` should work
 # The latter works in insert mode as well in both regular and terminal buffer
 #
-# C-I/C-O to cycle forward/backward through open buffers
+# <C-Right>/<C-Left> to cycle open tabs, so that you don't open already closed buffers
+# To reach several tabs away, do <leader>bc to pick tab by letter, or <leader>fb to open buffers list
+#
+# To go forward/backward in cursor history (where was I last), use <C-i>/<C-o>
+# This will jump between buffers as well. It's nice for going back after go to def or jumping around a file
 #
 # Visual mode
 # Follow which-key for key sequences, it's amazing
 # gU/gu to uppercase or lowercase selection, g~ to toggle case
-# gc to toggle comment
+# gc to toggle comment, gcc for the current line
 # gv to select last visual selection
 {
   pkgs,
@@ -94,7 +100,7 @@
             # Select and accept with `<C-space>`, close with `<C-e>`
             cmdline.keymap = {
               preset = "default";
-              # TODO: Tab accept doesn't work, not sure why
+              # TODO: Tab select_and_accept doesn't work, not sure why
               "<Tab>" = ["show" "accept"];
               "<C-space>" = ["select_and_accept" "fallback"];
             };
@@ -138,13 +144,10 @@
           };
         };
 
-        # Look into:
-        # folke/noice.nvim
-        # folke/trouble.nvim
-        # nvim-lua/plenary.nvim
-        # https://github.com/AndrewRadev/switch.vim
-        # https://github.com/andymass/vim-matchup
-        # https://github.com/rmagatti/goto-preview
+        # TODO: Configure this to fix swapfile issue where the message disappears on startup after a second due to redraw event
+        ui.noice = {
+          enable = true;
+        };
 
         extraPlugins = {
           # Could use smooth scroll with mouse wheel, see https://github.com/karb94/neoscroll.nvim/issues/50#issuecomment-1160094214
@@ -181,7 +184,24 @@
               })
             '';
           };
+          # lean.nvim dep, enables line comments with `gc`
+          tcomment = {
+            package = pkgs.vimPlugins.tcomment_vim;
+          };
+          # lean.nvim dep, enables enhanced `%` motion
+          matchup = {
+            package = pkgs.vimPlugins.vim-matchup;
+          };
+          # lean.nvim dep, enables switching text variants with `gs`
+          switch = {
+            package = pkgs.vimPlugins.switch-vim;
+          };
         };
+        # TODO: Look into optional lean.nvim enhancements
+        # https://github.com/lewis6991/satellite.nvim
+        # https://github.com/kosayoda/nvim-lightbulb
+        # https://github.com/rmagatti/goto-preview
+        #
         lazy.plugins = {
           "lean.nvim" = {
             package = pkgs-unstable.vimPlugins.lean-nvim;
@@ -195,11 +215,20 @@
           registers = "unnamedplus";
         };
         undoFile.enable = true;
+        # TODO: Replace with https://github.com/gbprod/yanky.nvim
         utility.undotree = {
           enable = true;
         };
-        # TODO: Save open files, possibly with session management
-        #preventJunkFiles = true;
+
+        # Preserve swapfiles in case Neovim crashes
+        preventJunkFiles = false;
+        # `stdpath` is at `~/.local/share/nvf/`
+        options.directory = lib.generators.mkLuaInline "vim.fn.stdpath('data') .. '/swap'";
+        options.backupdir = lib.generators.mkLuaInline "vim.fn.stdpath('data') .. '/backup'";
+
+        session.nvim-session-manager = {
+          enable = true;
+        };
 
         # Lower case chars will match on upper-case as well
         searchCase = "smart";
@@ -221,6 +250,28 @@
             swap_buf_right = "<leader>wsl";
           };
         };
+
+        # Tab line gives a quick overview of open tabs and whether they are saved
+        # Also helps with navigating open buffers, so I don't have to cycle by memory
+        # or open the buffers list, which is a power tool and usually overkill
+        tabline.nvimBufferline = {
+          enable = true;
+          setupOpts.options = {
+            sort_by = "insert_at_end";
+            hover = {
+              enabled = true;
+              delay = 100;
+            };
+          };
+          mappings = {
+            cycleNext = "<C-Right>";
+            cyclePrevious = "<C-Left>";
+            moveNext = "<A-Right>";
+            movePrevious = "<A-Left>";
+          };
+        };
+        # Needed for bufferline's hover on tab event showing the close icon
+        options.mousemoveevent = true;
 
         mini.bufremove = {
           enable = true;
@@ -253,20 +304,6 @@
             desc = "Switch to most recent buffer";
           }
           {
-            key = "<leader>b";
-            mode = ["n" "v"];
-            action = "";
-            silent = true;
-            desc = "Buffers";
-          }
-          {
-            key = "<leader>bn";
-            mode = ["n" "v"];
-            action = ":enew<CR>";
-            silent = true;
-            desc = "New buffer in this window";
-          }
-          {
             key = "<leader>b/";
             mode = ["n" "v"];
             action = ":vnew<CR>";
@@ -282,6 +319,7 @@
           }
           {
             # Deletes the buffer, prompting to save if changed
+            # Based on https://github.com/folke/snacks.nvim/blob/main/lua/snacks/bufdelete.lua
             key = "<leader>bd";
             mode = ["n" "v"];
             lua = true;
@@ -336,13 +374,6 @@
             desc = "Exit terminal mode";
           }
           {
-            key = "<leader>w";
-            mode = ["n" "v"];
-            action = "";
-            silent = true;
-            desc = "Windows";
-          }
-          {
             key = "<leader>w/";
             mode = ["n" "v"];
             action = ":vsp<CR>";
@@ -378,43 +409,30 @@
             desc = "Open filetree";
           }
           {
-            key = "<leader>u";
-            mode = ["n"];
-            action = "";
-            silent = true;
-            desc = "Undo Tree";
-          }
-          {
             key = "<leader>ut";
             mode = ["n"];
             action = ":UndotreeToggle<CR>";
             silent = true;
             desc = "Toggle Undo Tree";
           }
-          {
-            key = "<leader>l";
-            mode = ["n"];
-            action = "";
-            silent = true;
-            desc = "LSP";
-          }
-          {
-            key = "<leader>ws";
-            mode = ["n"];
-            action = "";
-            silent = true;
-            desc = "Swap windows";
-          }
         ];
-        # TODO: Set a description for intermediate keybindings, e.g. `<leader>l` is LSP-related commands
-        # Enable which-key for keybinding descriptions
+
         binds.whichKey = {
           enable = true;
+          register = {
+            "<leader>b" = "+Buffers";
+            "<leader>u" = "+Undo Tree";
+            "<leader>l" = "+LSP";
+            "<leader>w" = "+Windows";
+            "<leader>ws" = "+Swap windows";
+          };
         };
+
         binds.hardtime-nvim = {
           enable = false;
           #enable = true;
         };
+
         lsp = {
           enable = true;
           formatOnSave = true;
