@@ -91,11 +91,6 @@
   xdg.mimeApps = {
     enable = true;
     defaultApplications = {
-      "text/html" = ["firefox.desktop"];
-      "text/xml" = ["firefox.desktop"];
-      "x-scheme-handler/http" = ["firefox.desktop"];
-      "x-scheme-handler/https" = ["firefox.desktop"];
-      "application/pdf" = ["firefox.desktop"];
       "image/png" = ["org.gnome.Loupe.desktop"];
       "image/jpg" = ["org.gnome.Loupe.desktop"];
       "image/gif" = ["org.gnome.Loupe.desktop"];

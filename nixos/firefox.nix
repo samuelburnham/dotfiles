@@ -1,4 +1,6 @@
 # Largely inspired by https://github.com/Misterio77/nix-config/blob/36f76f9a4e6dd45c692755858a248c26883184f5/home/gabriel/features/desktop/common/firefox.nix
+# TODO: Look into the new profile UI: https://support.mozilla.org/en-US/kb/profile-management
+# Could be nice to separate work and personal accounts, bookmarks & history more cleanly than multi-account containers, or use both
 {
   pkgs,
   lib,
@@ -43,6 +45,7 @@
 
         # Disable about:config warning
         "browser.aboutConfig.showWarning" = false;
+        # Always open bookmarks in new tab
         "browser.tabs.loadBookmarksInTabs" = true;
         # Disable save passwords and autofill
         "signon.rememberSignons" = false;
@@ -77,8 +80,38 @@
         "privacy.trackingprotection.enabled" = true;
         "dom.security.https_only_mode" = true;
 
-        # TODO: Customize layout of top bar and extensions
+        # Vertical tabs and sidebar
+        "sidebar.verticalTabs" = true;
+        "sidebar.revamp" = true;
+        "sidebar.main.tools" = "syncedtabs,history,bookmarks";
+
+        # Always show downloads button in toolbar
+        "browser.download.autohideButton" = false;
+        # Toolbar layout
+        "browser.uiCustomization.state" = builtins.toJSON {
+          placements = {
+            widget-overflow-fixed-list = [];
+            # "_446900e4-71c2-419f-a6a7-df9c091e268b_-browser-action" = Bitwarden
+            nav-bar = ["sidebar-button" "back-button" "forward-button" "stop-reload-button" "vertical-spacer" "customizableui-special-spring1" "urlbar-container" "customizableui-special-spring2" "open-file-button" "downloads-button" "_446900e4-71c2-419f-a6a7-df9c091e268b_-browser-action" "addon_darkreader_org-browser-action" "ublock0_raymondhill_net-browser-action" "unified-extensions-button" "reset-pbm-toolbar-button" "firefox-view-button" "alltabs-button"];
+            toolbar-menubar = ["menubar-items"];
+            TabsToolbar = [];
+            vertical-tabs = ["tabbrowser-tabs"];
+            PersonalToolbar = ["personal-bookmarks"];
+          };
+          seen = ["save-to-pocket-button" "developer-button" "_446900e4-71c2-419f-a6a7-df9c091e268b_-browser-action" "addon_darkreader_org-browser-action" "ublock0_raymondhill_net-browser-action" "nordvpnproxy_nordvpn_com-browser-action" "screenshot-button"];
+          dirtyAreaCache = ["unified-extensions-area" "nav-bar" "PersonalToolbar" "toolbar-menubar" "TabsToolbar" "vertical-tabs"];
+          currentVersion = 23;
+          newElementCount = 2;
+        };
       };
     };
+  };
+
+  xdg.mimeApps.defaultApplications = {
+    "text/html" = ["firefox.desktop"];
+    "text/xml" = ["firefox.desktop"];
+    "x-scheme-handler/http" = ["firefox.desktop"];
+    "x-scheme-handler/https" = ["firefox.desktop"];
+    "application/pdf" = ["firefox.desktop"];
   };
 }
