@@ -1,13 +1,9 @@
 # TODO:
 # Set up projects for each Neovim instance like VSCode or tmux, where each neovim is its own project with saved state
 # Test lean.nvim with goto-def, infoview, and hover, `,` local leader key maybe should be unified with `<leader>l`
-# Recover saved changes via swapfile or similar, but not in an annoying way
-#   Currently `preventJunkFiles = false`, which means a backup `~` is saved to the current dir
-#   Test `vim -r` without junk files to recover progress: https://neovim.io/doc/user/recover.html
 # Test `blink-cmp`
 # Add some functionality borrowed from tmux like session persistence, SSH, and running a Neovim systemd server on startup. See https://kraust.github.io/posts/neovim-is-a-multiplexer/
 # Complete leader keybindings for common tasks (see Emacs config)
-# Test `vim.utility.direnv.enable` to sync Nvim shell env with direnv - not sure it's needed if Nvim is launched from the dev shell dir
 # Obsidian.nvim or Neorg for note taking and project planning, with https://github.com/MeanderingProgrammer/render-markdown.nvim
 # Seem Emacs config for more options
 # Consider Neovide for GUI experience and to fully decouple from terminal
@@ -90,6 +86,9 @@
           kitty
         ];
 
+        # TODO: Don't make enter select_and_accept completion ever, just use Tab or C-Space to select
+        # Enter is for new line (in file) or <CR> in cmdline
+        # TODO: Unify cmdline and file-based keybindings
         # blink-cmp autocompletion plugion
         autocomplete.blink-cmp = {
           enable = true;
@@ -143,13 +142,67 @@
             };
           };
         };
-
-        # TODO: Configure this to fix swapfile issue where the message disappears on startup after a second due to redraw event
         ui.noice = {
+          enable = true;
+          setupOpts = {
+            presets = {
+              command_palette = false;
+            };
+            # Workaround enabling `:!` shell command output: https://github.com/folke/noice.nvim/issues/1097
+            routes = [
+              {
+                filter = {
+                  event = "msg_show";
+                  kind = ["shell_out" "shell_err" "shell_ret"];
+                };
+                view = "popup";
+                opts = {
+                  level = "info";
+                  skip = false;
+                  replace = false;
+                };
+              }
+            ];
+          };
+        };
+
+        notify.nvim-notify = {
           enable = true;
         };
 
+        # Use `direnv.nvim` instead for now to fix loading files from other directorie
+        utility.direnv.enable = false;
+
         extraPlugins = {
+          # Enables loading rust-analyzer after direnv completes for Rust files in another directory
+          # Otherwise rust-analyzer can't find the binary because direnv hasn't yet loaded it from the Nix flake
+          # Lean doesn't have this issue, likely due to starting via autocmd rather than `vim.lsp.enable()`
+          direnv = {
+            package = pkgs.vimUtils.buildVimPlugin {
+              pname = "direnv.nvim";
+              version = "main";
+              src = pkgs.fetchFromGitHub {
+                owner = "actionshrimp";
+                repo = "direnv.nvim";
+                rev = "0d2edd378dbdf2c653869772d761ad914219ba9d";
+                hash = "sha256-p2im4nUV0n9HQsjCA9oGJvTADfKGlCEr/RYWGlUszuU=";
+              };
+            };
+            setup = ''
+              require('direnv-nvim').setup({
+                on_direnv_finished = function ()
+                  bufnr = vim.api.nvim_get_current_buf()
+                  if vim.bo[bufnr].filetype == "rust" then
+                    vim.lsp.start({
+                      name = 'rust-analyzer',
+                      cmd = {'rust-analyzer'},
+                      root_dir = vim.fs.root(0, {'Cargo.toml'}),
+                    })
+                  end
+                end
+              })
+            '';
+          };
           # Could use smooth scroll with mouse wheel, see https://github.com/karb94/neoscroll.nvim/issues/50#issuecomment-1160094214
           neoscroll = {
             package = pkgs.vimPlugins.neoscroll-nvim;
@@ -173,6 +226,7 @@
               end
             '';
           };
+          # Vim launched from `:terminal` opens a buffer instead of vimception
           flatten = {
             package = pkgs-unstable.vimPlugins.flatten-nvim;
             setup = ''
@@ -209,6 +263,16 @@
             setupOpts = {mappings = true;};
             event = ["BufReadPre *.lean" "BufNewFile *.lean"];
           };
+          # TODO: Add dashboard-nvim to quickly open recent sessions on launch
+          # Session manager by folke that (mostly) works with Noice
+          "persistence.nvim" = {
+            package = pkgs-unstable.vimPlugins.persistence-nvim;
+            setupModule = "persistence";
+            setupOpts = {
+              dir = lib.generators.mkLuaInline "vim.fn.stdpath('data') .. '/sessions/' ";
+            };
+            event = ["BufReadPre"];
+          };
         };
         clipboard = {
           enable = true;
@@ -226,17 +290,17 @@
         options.directory = lib.generators.mkLuaInline "vim.fn.stdpath('data') .. '/swap'";
         options.backupdir = lib.generators.mkLuaInline "vim.fn.stdpath('data') .. '/backup'";
 
+        # Using persistence.nvim for now
         session.nvim-session-manager = {
-          enable = true;
+          enable = false;
         };
 
         # Lower case chars will match on upper-case as well
         searchCase = "smart";
 
-        # TODO: Test keybindings further, probably rebind swap-buffers: https://github.com/mrjones2014/smart-splits.nvim
         # Move cursor between buffers with Ctrl+hjkl
         # Resize with Alt+hjkl
-        # Swap buffers with <leader><leader>hjkl
+        # Swap buffers with <leader>ws+hjkl
         utility.smart-splits = {
           enable = true;
           keymaps = {
@@ -415,6 +479,78 @@
             silent = true;
             desc = "Toggle Undo Tree";
           }
+          {
+            key = "<leader>sl";
+            mode = ["n"];
+            lua = true;
+            action = ''
+              function()
+                require("persistence").load({ last = true })
+              end
+            '';
+            silent = true;
+            desc = "Load last session";
+          }
+          {
+            key = "<leader>ss";
+            mode = ["n"];
+            lua = true;
+            action = ''
+              function()
+                require("persistence").select()
+              end
+            '';
+            silent = true;
+            desc = "Select session to load";
+          }
+          {
+            key = "<leader>sl";
+            mode = ["n"];
+            lua = true;
+            action = ''
+              function()
+                require("persistence").load()
+              end
+            '';
+            silent = true;
+            desc = "Load session for the current directory";
+          }
+          {
+            key = "<leader>sL";
+            mode = ["n"];
+            lua = true;
+            action = ''
+              function()
+                require("persistence").load({ last = true })
+              end
+            '';
+            silent = true;
+            desc = "Load most recent session (global)";
+          }
+          {
+            key = "<leader>sd";
+            mode = ["n"];
+            lua = true;
+            action = ''
+              function()
+                require("persistence").stop()
+              end
+            '';
+            silent = true;
+            desc = "Disable persistence - don't save on exit";
+          }
+          {
+            key = "<leader>se";
+            mode = ["n"];
+            lua = true;
+            action = ''
+              function()
+                require("persistence").start()
+              end
+            '';
+            silent = true;
+            desc = "Enable persistence - will save on exit";
+          }
         ];
 
         binds.whichKey = {
@@ -498,6 +634,30 @@
               end
             '';
           }
+          # Workaround due to Noice mangling swapfile messages in the UI on session restore
+          # When opening a file otherwise, the swap message takes priority and prints correctly
+          {
+            enable = true;
+            desc = "Disable Noice before loading session";
+            event = ["User"];
+            pattern = ["PersistenceLoadPre"];
+            callback = lib.generators.mkLuaInline ''
+              function()
+                vim.cmd("Noice disable")
+              end
+            '';
+          }
+          {
+            enable = true;
+            desc = "Enable Noice after loading session";
+            event = ["User"];
+            pattern = ["PersistenceLoadPost"];
+            callback = lib.generators.mkLuaInline ''
+              function()
+                vim.cmd("Noice enable")
+              end
+            '';
+          }
         ];
 
         languages.rust = {
@@ -506,11 +666,18 @@
           #format.enable = true;
           #crates.enable = true;
           lsp = {
-            enable = true;
+            # Enabling makes the LSP start automatically via the global `vim.lsp.enable('rust-analyzer')` setting
+            # This breaks when opening files from another directory because direnv hasn't finished loading rust-analyzer yet.
+            # The solution is the direnv.nvim autocmd in `extraPlugins`
+            enable = false;
           };
         };
         # TODO: Modeline icons and general nerd font support (already installed in home.nix and supported by Ghostty)
         #utility.icon-picker.enable = true;
+
+        luaConfigRC.config-dir = ''
+          require("config")
+        '';
       };
     };
   };

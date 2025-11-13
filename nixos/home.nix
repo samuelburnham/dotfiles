@@ -41,6 +41,7 @@
     # Image file utilities
     imagemagick
     ghostscript
+    inkscape
   ];
 
   programs.bash = {
