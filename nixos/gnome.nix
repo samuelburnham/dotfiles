@@ -2,9 +2,14 @@
   home.packages = with pkgs.gnomeExtensions; [
     tiling-shell
     caffeine
-    freon
+    # Official Gnome top bar display for CPU, RAM, swap, and network usage
     system-monitor
+    # Comprehensive top bar display for system info, I just use it for temps and fan speed
+    vitals
+    # Start apps in a specific workspace
     auto-move-windows
+    # Use Gnome/`powerprofilesctl` Performance mode on AC charging, Balanced mode on battery
+    auto-power-profile
   ];
   # These settings can be found in `dconf-editor` or by running `dconf watch /` and then
   # editing GUI settings, which will print values in the terminal.
@@ -13,11 +18,12 @@
     settings = {
       "org/gnome/shell" = {
         enabled-extensions = with pkgs.gnomeExtensions; [
-          tiling-shell.extensionUuid
           caffeine.extensionUuid
-          freon.extensionUuid
+          vitals.extensionUuid
           system-monitor.extensionUuid
+          tiling-shell.extensionUuid
           auto-move-windows.extensionUuid
+          auto-power-profile.extensionUuid
         ];
       };
       # TODO: Configure the selected layouts, though it will vary by monitors
@@ -37,12 +43,14 @@
       "org/gnome/desktop/wm/keybindings" = {
         move-to-monitor-down = ["<Shift><Super>x"];
         move-to-monitor-up = ["<Shift><Super>w"];
+        # TODO: This is set but not working on laptop
         move-to-workspace-left = ["<Shift><Super>Left"];
         move-to-workspace-right = ["<Shift><Super>Right"];
         switch-to-workspace-left = ["<Super>Left"];
         switch-to-workspace-right = ["<Super>Right"];
         switch-to-workspace-1 = ["<Super>Home"];
         switch-to-workspace-last = ["<Super>End"];
+        # TODO: Make this Alt-Tab on laptop
         switch-windows = ["<Alt>f"];
         switch-windows-backward = ["<Shift><Alt>f"];
         maximize = ["<Super>Up"];

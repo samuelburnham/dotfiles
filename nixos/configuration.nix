@@ -4,14 +4,14 @@
 {
   config,
   pkgs,
-  inputs,
   ...
 }: {
   imports = [
     # Include the results of the hardware scan.
     ./hardware-configuration.nix
   ];
-
+  # TODO: Add an option to enter the BIOS from the boot loader,
+  # rather than remembering which key to spam on startup
   # Use the Grub2 boot loader with EFI.
   boot.loader.systemd-boot.enable = false;
   boot.loader.grub = {
@@ -25,45 +25,45 @@
     efiSysMountPoint = "/boot";
   };
 
-  # Fixes suspend issue on Gigabyte B650I motherboard
-  # Note: If DDR5 RAM XMP profile is enabled, resuming from suspend may fail
-  # I noticed this once in the NixOS boot log: `bug: bad page state in process swapper`
-  # If so, lower the RAM speed in BIOS incrementally and test. E.g. 6400Mhz might fail, but 6000Mhz works
-  boot.kernelParams = ["acpi_osi=\"!Windows 2015\""];
-  systemd.services.disable-xh00-wakeup = {
-    description = "Disable XH00 device wakeup";
-    serviceConfig = {
-      Type = "oneshot";
-      ExecStart = pkgs.writeShellScript "disable-xh00-wakeup" ''
-        if grep -q "XH00.*enabled" /proc/acpi/wakeup; then
-          echo "XH00" > /proc/acpi/wakeup
-        fi
-      '';
-    };
-    wantedBy = ["multi-user.target"];
-  };
-  # Enable wakeup for Kinesis keyboard
-  services.udev.extraRules = ''
-    ACTION=="add", SUBSYSTEM=="usb", ATTRS{idVendor}=="29ea", ATTRS{idProduct}=="0362", ATTR{power/wakeup}="enabled"
+  # Hibernate with swapfile, from https://nixos.wiki/wiki/Hibernation
+  # Create swapfile for extra RAM while programming and also for hibernation
+  # Make sure swap space >= RAM size
+  swapDevices = [
+    {
+      device = "/var/lib/swapfile";
+      size = 32 * 1024;
+    }
+  ];
+  # Suspend with s2idle for fast resume, then hibernate (suspend-to-disk) after 30 min for low power mode. Requires pressing the power button to wake up
+  boot.kernelParams = ["mem_sleep_default=s2idle" "resume_offset=14559232"];
+  # UUID of root ext4 partition
+  boot.resumeDevice = "/dev/disk/by-uuid/e1746389-93c2-4f21-8086-f3b5e685413b";
+
+  # Enable sleep settings with systemd and logind
+  powerManagement.enable = true;
+  # Enable performance profiles used by Gnome
+  services.power-profiles-daemon.enable = true;
+  # Suspend first then hibernate when closing the lid
+  services.logind.lidSwitch = "suspend-then-hibernate";
+  # 30 minute time delay after suspend before hibernation
+  systemd.sleep.extraConfig = ''
+    HibernateDelaySec=30m
   '';
 
-  networking.hostName = "nixos"; # Define your hostname.
-  #networking.wireless.enable = true;  # Enables wireless support via wpa_supplicant.
+  # If using laptop as daily driver, consider setting max charge to 80% for battery health/longevity
+  # My laptop doesn't have a `/sys/class/power_supply/BAT*/charge_control_{start,end}_threshold`, so UPower isn't able to provide max charge as a Gnome power settings option. Could try adding support for my laptop to https://github.com/BeardOverflow/msi-ec or checking back in a few months
+  # See https://vdwaa.nl/gnome-upower-charge-thresholds.html
+  #services.upower.enable = true;
+  # Alternatively, can try setting the max charge via TLP. Not a priority atm
 
-  # Configure network proxy if necessary
+  networking.hostName = "nixbook"; # Define your hostname.
+  # networking.wireless.enable = true;  # Enables wireless support via wpa_supplicant.
+
   # networking.proxy.default = "http://user:password@proxy:port/";
   # networking.proxy.noProxy = "127.0.0.1,localhost,internal.domain";
 
   # Enable networking
-  networking.networkmanager = {
-    enable = true;
-    wifi = {
-      # Neither of these solved my problem of Wifi having poor connection for several minutes after resuming from suspend
-      # Solution: use Ethernet
-      scanRandMacAddress = false;
-      powersave = false;
-    };
-  };
+  networking.networkmanager.enable = true;
 
   # Set your time zone.
   time.timeZone = "America/New_York";
@@ -84,14 +84,11 @@
   };
 
   # Enable the X11 windowing system.
-  # Not set explicitly but Wayland is enabled and the default
   services.xserver.enable = true;
 
   # Enable the GNOME Desktop Environment.
   services.xserver.displayManager.gdm.enable = true;
   services.xserver.desktopManager.gnome.enable = true;
-
-  services.gnome.games.enable = false;
 
   # Configure keymap in X11
   services.xserver.xkb = {
@@ -101,8 +98,6 @@
 
   # Enable CUPS to print documents.
   services.printing.enable = true;
-  # Had to remove and re-add printer in Gnome settings after adding the driver
-  services.printing.drivers = [pkgs.brlaser];
 
   # Enable sound with pipewire.
   services.pulseaudio.enable = false;
@@ -126,35 +121,26 @@
   # Define a user account. Don't forget to set a password with ‘passwd’.
   users.users.sam = {
     isNormalUser = true;
-    description = "Sam";
+    description = "Sam Burnham";
     extraGroups = ["networkmanager" "wheel"];
-    packages = with pkgs; [
-      #  thunderbird
-    ];
   };
+
+  nix.settings.trusted-users = ["sam"];
+
+  nix.settings.experimental-features = ["nix-command" "flakes"];
+
+  # Install firefox.
+  programs.firefox.enable = true;
 
   # Allow unfree packages
   nixpkgs.config.allowUnfree = true;
 
-  nix.settings.experimental-features = ["nix-command" "flakes"];
-
-  nix.settings.trusted-users = ["sam"];
-
-  #programs.firefox.enable = true; # Managed by home-manager
-
   # List packages installed in system profile. To search, run:
   # $ nix search wget
   environment.systemPackages = with pkgs; [
-    # vim # Do not forget to add an editor to edit configuration.nix! The Nano editor is also installed by default.
+    #  vim # Do not forget to add an editor to edit configuration.nix! The Nano editor is also installed by default.
     wget
     git
-  ];
-
-  environment.gnome.excludePackages = with pkgs; [
-    gnome-calendar
-    epiphany
-    geary
-    gnome-music
   ];
 
   programs.neovim = {
@@ -168,26 +154,28 @@
   # Increase `sudo` timeout to 30 minutes
   security.sudo.extraConfig = "Defaults timestamp_timeout=30";
 
-  # Automated backups to external drive
-  systemd.services.restic-backup = {
-    enable = true; #TODO: Is this needed?
-    description = "Restic backup";
-    serviceConfig = {
-      Type = "oneshot";
-      ExecStart = ''
-        ${pkgs.restic}/bin/restic backup /home/sam/dotfiles --password-file /home/sam/restic-password
-      '';
-      EnvironmentFile = "/home/sam/restic.env";
-    };
+  # TODO: Make laptop-specific config with below
+  # Also add battery percentage to top bar in Gnome
+
+  # Remap Caps Lock to Esc on tap, Ctrl on hold/chord
+  # Not useful for Kinesis keyboard
+  # From https://discourse.nixos.org/t/best-way-to-remap-caps-lock-to-esc-with-wayland/39707/6
+  services.interception-tools = let
+    itools = pkgs.interception-tools;
+    itools-caps = pkgs.interception-tools-plugins.caps2esc;
+  in {
+    enable = true;
+    plugins = [itools-caps];
+    # requires explicit paths: https://github.com/NixOS/nixpkgs/issues/126681
+    udevmonConfig = pkgs.lib.mkDefault ''
+      - JOB: "${itools}/bin/intercept -g $DEVNODE | ${itools-caps}/bin/caps2esc -m 1 | ${itools}/bin/uinput -d $DEVNODE"
+        DEVICE:
+          EVENTS:
+            EV_KEY: [KEY_CAPSLOCK, KEY_ESC]
+    '';
   };
-  systemd.timers.restic-backup = {
-    description = "Run backup daily";
-    wantedBy = ["timers.target"];
-    timerConfig = {
-      OnCalendar = "*:0/5";
-      Persistent = true;
-    };
-  };
+
+  programs.steam.enable = true;
 
   # Some programs need SUID wrappers, can be configured further or are
   # started in user sessions.

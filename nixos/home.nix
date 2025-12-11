@@ -42,6 +42,8 @@
     imagemagick
     ghostscript
     inkscape
+    # Gaming overlay for FPS, temps, CPU/GPU load
+    mangohud
   ];
 
   programs.bash = {

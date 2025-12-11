@@ -2,11 +2,11 @@
   description = "NixOS flake config";
 
   inputs = {
-    # NixOS official package source, using the nixos-25.05 branch here
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
+    # NixOS official package source, using the nixos-25.11 branch
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
     nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
     home-manager = {
-      url = "github:nix-community/home-manager/release-25.05";
+      url = "github:nix-community/home-manager/release-25.11";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     nvf.url = "github:notashelf/nvf/v0.8";
