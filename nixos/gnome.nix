@@ -10,6 +10,8 @@
     auto-move-windows
     # Use Gnome/`powerprofilesctl` Performance mode on AC charging, Balanced mode on battery
     auto-power-profile
+    # Enable hibernate, suspend-to-hibernate, and reboot to BIOS in Gnome power menu. When finished with the laptop for the day/overnight, hibernate or suspend-to-hibernate will allow resuming progress later. Simply closing the lid and unplugging any USB peripherals will also suspend-to-hibernate per systemd settings in configuration.nix
+    power-off-options
   ];
   # These settings can be found in `dconf-editor` or by running `dconf watch /` and then
   # editing GUI settings, which will print values in the terminal.
@@ -24,6 +26,7 @@
           tiling-shell.extensionUuid
           auto-move-windows.extensionUuid
           auto-power-profile.extensionUuid
+          power-off-options.extensionUuid
         ];
       };
       # TODO: Configure the selected layouts, though it will vary by monitors

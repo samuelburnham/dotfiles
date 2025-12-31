@@ -44,9 +44,15 @@
   # Enable performance profiles used by Gnome
   services.power-profiles-daemon.enable = true;
   # Suspend first then hibernate when closing the lid
-  services.logind.lidSwitch = "suspend-then-hibernate";
+  services.logind = {
+    lidSwitch = "suspend-then-hibernate";
+    settings.Login = {
+      SuspendThenHibernate = "yes";
+    };
+  };
   # 30 minute time delay after suspend before hibernation
   systemd.sleep.extraConfig = ''
+    AllowSuspendThenHibernate=yes
     HibernateDelaySec=30m
   '';
 

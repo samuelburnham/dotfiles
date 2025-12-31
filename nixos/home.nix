@@ -15,6 +15,7 @@
   home.homeDirectory = "/home/sam";
 
   home.packages = with pkgs; [
+    thunderbird
     bitwarden-desktop
     vscode
     zulip

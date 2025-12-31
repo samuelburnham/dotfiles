@@ -24,7 +24,8 @@
     pkgs-unstable = import nixpkgs-unstable {inherit system;};
   in {
     # Replace `nixos` with your hostname
-    nixosConfigurations.nixos = nixpkgs.lib.nixosSystem {
+    # NOTE: If changing the hostname later, run `nixos-rebuild build --flake .#new-name` first, then `nixos-rebuild switch --flake .#new-name`, because otherwise NixOS will try to switch configurations on two different hostnames and run into a mismatch error
+    nixosConfigurations.nixbook = nixpkgs.lib.nixosSystem {
       inherit system;
       specialArgs = {inherit inputs pkgs-unstable;};
       modules = [
