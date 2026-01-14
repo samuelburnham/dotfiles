@@ -11,8 +11,6 @@
     };
     # Neovim flake
     nvf.url = "github:notashelf/nvf";
-    # NixOS VM for Claude Code
-    nixos-shell.url = "github:Mic92/nixos-shell";
     # Sops-nix for secrets management
     sops-nix = {
       url = "github:Mic92/sops-nix";
@@ -27,7 +25,6 @@
     nixpkgs-unstable,
     home-manager,
     nvf,
-    nixos-shell,
     ...
   } @ inputs: let
     system = "x86_64-linux";
