@@ -6,7 +6,6 @@
   ...
 }: {
   imports = [
-    ./nvim.nix
     ./gnome.nix
     ./alias.nix
     ./firefox.nix
@@ -17,6 +16,7 @@
   home.homeDirectory = "/home/sam";
 
   home.packages = with pkgs; [
+    inputs.neovim.packages.${system}.default
     bitwarden-desktop
     vscode
     zulip

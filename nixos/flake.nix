@@ -9,13 +9,16 @@
       url = "github:nix-community/home-manager/release-25.11";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    # Neovim flake
-    nvf.url = "github:notashelf/nvf";
-    # Sops-nix for secrets management
-    sops-nix = {
-      url = "github:Mic92/sops-nix";
+    neovim = {
+      url = "path:../nvim";
       inputs.nixpkgs.follows = "nixpkgs";
+      inputs.nixpkgs-unstable.follows = "nixpkgs";
     };
+    # Sops-nix for secrets management
+    #sops-nix = {
+    #  url = "github:Mic92/sops-nix";
+    #  inputs.nixpkgs.follows = "nixpkgs";
+    #};
   };
 
   # TODO: Rewrite with flake-parts and/or Dendritic Nix
@@ -24,7 +27,7 @@
     nixpkgs,
     nixpkgs-unstable,
     home-manager,
-    nvf,
+    neovim,
     ...
   } @ inputs: let
     system = "x86_64-linux";
@@ -48,22 +51,6 @@
           home-manager.backupFileExtension = "bak";
         }
       ];
-    };
-
-    packages.${system} = {
-      nvim =
-        (nvf.lib.neovimConfiguration {
-          inherit pkgs;
-
-          extraSpecialArgs = {
-            inherit inputs pkgs-unstable;
-          };
-
-          modules = [
-            ./nvim-settings.nix
-          ];
-        })
-        .neovim;
     };
   };
 }
