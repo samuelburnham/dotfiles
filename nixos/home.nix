@@ -2,6 +2,7 @@
 {
   pkgs,
   pkgs-unstable,
+  inputs,
   ...
 }: {
   imports = [
@@ -9,6 +10,7 @@
     ./gnome.nix
     ./alias.nix
     ./firefox.nix
+    #inputs.sops-nix.homeManagerModules.sops
   ];
 
   home.username = "sam";
@@ -59,6 +61,7 @@
       theme = "Builtin Solarized Dark";
       shell-integration-features = "no-cursor";
       cursor-style = "bar";
+      keybind = "shift+enter=text:\\n"; # Fixes Claude Code Shift+Enter newlines
     };
   };
 
@@ -78,9 +81,11 @@
 
   programs.git = {
     enable = true;
-    userName = "samuelburnham";
-    userEmail = "45365069+samuelburnham@users.noreply.github.com";
-    extraConfig = {
+    settings = {
+      user = {
+        name = "samuelburnham";
+        email = "45365069+samuelburnham@users.noreply.github.com";
+      };
       init.defaultBranch = "main";
     };
   };
@@ -97,6 +102,67 @@
       "image/gif" = ["org.gnome.Loupe.desktop"];
     };
   };
+
+  services.podman = {
+    enable = true;
+    #builds = {
+    #  claudeman = {
+    #    # TODO: Set `SetWorkingDirectory` so I can use relative path here
+    #    file = "/home/sam/dotfiles/nixos/Dockerfile.claudeman";
+    #    autoStart = false;
+    #    tags = ["latest"];
+    #  };
+    #};
+    #containers = {
+    #  claudeman = {
+    #    image = "localhost/claudeman:latest";
+    #    autoStart = false; # Don't start on boot. What about autostart on login?
+    #    # Enable Docker compatibility
+    #    dockerCompat.enable = true;
+    #    #environment = {
+    #    #  TERM = "xterm-256color";
+    #    #  EDITOR = "vim";
+    #    #};
+    #    volumes = [
+    #      #"${self.home.homeDirectory}/repos/argument/tests/templean:/workspace:rw"
+    #      "/home/sam/repos/argument/tests/templean:/home/ubuntu:rw"
+    #    ];
+
+    #    # Add network access, SSH forwarding, etc
+    #    extraPodmanArgs = [
+    #      "--userns=keep-id"
+    #      "--user ubuntu"
+    #      "--workdir /home/ubuntu"
+    #      #"--privileged"
+    #      #"--network=host"
+    #    ];
+    #  };
+    #};
+  };
+
+  # sops = {
+  #   # It's also possible to use a ssh key, but only when it has no password:
+  #   #age.sshKeyPaths = [ "/home/user/path-to-ssh-key" ];
+  #   defaultSopsFile = ./secrets/secrets.yaml;
+  #   defaultSopsFormat = "yaml";
+  #
+  #   age = {
+  #     keyFile = "/home/sam/.config/sops/age/keys.txt"; # must have no password!
+  #   };
+  #
+  #   secrets = {
+  #     anthropic-api-key = {};
+  #     #"myservice/my_subdir/my_secret" = {};
+  #   };
+  #   #secrets.test = {
+  #   # sopsFile = ./secrets.yml.enc; # optionally define per-secret files
+  #
+  #   # %r gets replaced with a runtime directory, use %% to specify a '%'
+  #   # sign. Runtime dir is $XDG_RUNTIME_DIR on linux and $(getconf
+  #   # DARWIN_USER_TEMP_DIR) on darwin.
+  #   #  path = "%r/test.txt";
+  #   #};
+  # };
 
   #environment.sessionVariables.DEFAULT_BROWSER = "${pkgs.firefox}/bin/firefox";
 

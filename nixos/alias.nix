@@ -1,7 +1,7 @@
 {pkgs, ...}: let
   rebuild = pkgs.writeShellApplication {
     name = "rebuild";
-    text = "nixos-rebuild switch --use-remote-sudo";
+    text = "nixos-rebuild switch --sudo";
   };
 in {
   home.packages = [

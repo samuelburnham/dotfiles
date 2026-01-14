@@ -75,6 +75,8 @@
           "T9nJot5PurhJSy8n038xGA=="
         ] (_: 1);
 
+        "browser.urlbar.suggest.quicksuggest.sponsored" = false;
+
         # Harden
         # These don't seem to stick after login
         "privacy.trackingprotection.enabled" = true;

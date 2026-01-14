@@ -2,8 +2,8 @@
   home.packages = with pkgs.gnomeExtensions; [
     tiling-shell
     caffeine
-    freon
     system-monitor
+    vitals
     auto-move-windows
   ];
   # These settings can be found in `dconf-editor` or by running `dconf watch /` and then
@@ -15,8 +15,8 @@
         enabled-extensions = with pkgs.gnomeExtensions; [
           tiling-shell.extensionUuid
           caffeine.extensionUuid
-          freon.extensionUuid
           system-monitor.extensionUuid
+          vitals.extensionUuid
           auto-move-windows.extensionUuid
         ];
       };
@@ -47,7 +47,7 @@
         switch-windows-backward = ["<Shift><Alt>f"];
         maximize = ["<Super>Up"];
         unmaximize = ["<Super>Down"];
-        close = ["<Shift><Control>w"];
+        #close = ["<Shift><Control>w"];
         toggle-fullscreen = ["<Alt><Super>f"];
       };
       "org/gnome/shell/keybindings" = {
@@ -98,9 +98,9 @@
       "org/gnome/settings-daemon/plugins/color" = {
         night-light-enabled = true;
       };
-      "org/gnome/desktop/notifications/application/spotify" = {
-        enable = false;
-      };
+      # "org/gnome/desktop/notifications/application/spotify" = {
+      #   enable = false;
+      # };
       # TODO: Add weather in "org/gnome/Weather/locations" and/or "org/gnome/shell/weather/locations"
     };
   };

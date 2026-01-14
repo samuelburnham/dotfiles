@@ -2,25 +2,36 @@
   description = "NixOS flake config";
 
   inputs = {
-    # NixOS official package source, using the nixos-25.05 branch here
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
+    # NixOS official package source, using the nixos-25.11 branch
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
     nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
     home-manager = {
-      url = "github:nix-community/home-manager/release-25.05";
+      url = "github:nix-community/home-manager/release-25.11";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    nvf.url = "github:notashelf/nvf/v0.8";
+    # Neovim flake
+    nvf.url = "github:notashelf/nvf";
+    # NixOS VM for Claude Code
+    nixos-shell.url = "github:Mic92/nixos-shell";
+    # Sops-nix for secrets management
+    sops-nix = {
+      url = "github:Mic92/sops-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
+  # TODO: Rewrite with flake-parts and/or Dendritic Nix
   outputs = {
     self,
     nixpkgs,
     nixpkgs-unstable,
     home-manager,
     nvf,
+    nixos-shell,
     ...
   } @ inputs: let
     system = "x86_64-linux";
+    pkgs = import nixpkgs {inherit system;};
     pkgs-unstable = import nixpkgs-unstable {inherit system;};
   in {
     # Replace `nixos` with your hostname
@@ -40,6 +51,22 @@
           home-manager.backupFileExtension = "bak";
         }
       ];
+    };
+
+    packages.${system} = {
+      nvim =
+        (nvf.lib.neovimConfiguration {
+          inherit pkgs;
+
+          extraSpecialArgs = {
+            inherit inputs pkgs-unstable;
+          };
+
+          modules = [
+            ./nvim-settings.nix
+          ];
+        })
+        .neovim;
     };
   };
 }

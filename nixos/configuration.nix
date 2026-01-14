@@ -28,7 +28,7 @@
   # Fixes suspend issue on Gigabyte B650I motherboard
   # Note: If DDR5 RAM XMP profile is enabled, resuming from suspend may fail
   # I noticed this once in the NixOS boot log: `bug: bad page state in process swapper`
-  # If so, lower the RAM speed in BIOS incrementally and test. E.g. 6400Mhz might fail, but 6000Mhz works
+  # If so, lower the RAM speed in BIOS incrementally and test. E.g. 6400Mhz might fail, but 6000Mhz usually works
   boot.kernelParams = ["acpi_osi=\"!Windows 2015\""];
   systemd.services.disable-xh00-wakeup = {
     description = "Disable XH00 device wakeup";
@@ -88,8 +88,8 @@
   services.xserver.enable = true;
 
   # Enable the GNOME Desktop Environment.
-  services.xserver.displayManager.gdm.enable = true;
-  services.xserver.desktopManager.gnome.enable = true;
+  services.displayManager.gdm.enable = true;
+  services.desktopManager.gnome.enable = true;
 
   services.gnome.games.enable = false;
 
@@ -99,10 +99,13 @@
     variant = "";
   };
 
+  # TODO: Fix printing once new CUPS version is released
   # Enable CUPS to print documents.
-  services.printing.enable = true;
-  # Had to remove and re-add printer in Gnome settings after adding the driver
-  services.printing.drivers = [pkgs.brlaser];
+  services.printing = {
+    enable = true;
+    # Had to remove and re-add printer in Gnome settings after adding the driver
+    drivers = [pkgs.brlaser];
+  };
 
   # Enable sound with pipewire.
   services.pulseaudio.enable = false;
@@ -189,6 +192,10 @@
     };
   };
 
+  programs.steam.enable = true;
+
+  virtualisation.containers.enable = true;
+
   # Some programs need SUID wrappers, can be configured further or are
   # started in user sessions.
   # programs.mtr.enable = true;
@@ -202,6 +209,7 @@
   # Enable the OpenSSH daemon.
   # services.openssh.enable = true;
 
+  networking.firewall.enable = true;
   # Open ports in the firewall.
   # networking.firewall.allowedTCPPorts = [ ... ];
   # networking.firewall.allowedUDPPorts = [ ... ];
