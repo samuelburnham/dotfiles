@@ -1,8 +1,8 @@
-# Main home-manager config
+# Shared home-manager configuration
+# Imported by all hosts' home.nix
 {
   pkgs,
   pkgs-unstable,
-  inputs,
   ...
 }: {
   imports = [
@@ -16,7 +16,6 @@
   home.homeDirectory = "/home/sam";
 
   home.packages = with pkgs; [
-    inputs.neovim.packages.${system}.default
     bitwarden-desktop
     vscode
     zulip
@@ -38,7 +37,6 @@
     restic
     nerd-fonts.fira-code
     nerd-fonts.jetbrains-mono
-    gh
     htop
     # Image file utilities
     imagemagick
@@ -49,8 +47,10 @@
   programs.bash = {
     enable = true;
     # Changes backup files `ls` color to dim cyan, otherwise they are invisible with solarized dark theme
+    # Add Rust binaries to path, so `cargo install` works OOTB
     bashrcExtra = ''
       LS_COLORS=$(echo "$LS_COLORS" | sed 's/=00;90/=36;2/g')
+      export PATH="$HOME/.cargo/bin:$PATH"
     '';
   };
 
@@ -90,6 +90,11 @@
     };
   };
 
+  programs.gh = {
+    enable = true;
+    gitCredentialHelper.enable = true;
+  };
+
   # Default apps
   # Firefox for web browser
   # Loupe for image viewer
@@ -105,39 +110,6 @@
 
   services.podman = {
     enable = true;
-    #builds = {
-    #  claudeman = {
-    #    # TODO: Set `SetWorkingDirectory` so I can use relative path here
-    #    file = "/home/sam/dotfiles/nixos/Dockerfile.claudeman";
-    #    autoStart = false;
-    #    tags = ["latest"];
-    #  };
-    #};
-    #containers = {
-    #  claudeman = {
-    #    image = "localhost/claudeman:latest";
-    #    autoStart = false; # Don't start on boot. What about autostart on login?
-    #    # Enable Docker compatibility
-    #    dockerCompat.enable = true;
-    #    #environment = {
-    #    #  TERM = "xterm-256color";
-    #    #  EDITOR = "vim";
-    #    #};
-    #    volumes = [
-    #      #"${self.home.homeDirectory}/repos/argument/tests/templean:/workspace:rw"
-    #      "/home/sam/repos/argument/tests/templean:/home/ubuntu:rw"
-    #    ];
-
-    #    # Add network access, SSH forwarding, etc
-    #    extraPodmanArgs = [
-    #      "--userns=keep-id"
-    #      "--user ubuntu"
-    #      "--workdir /home/ubuntu"
-    #      #"--privileged"
-    #      #"--network=host"
-    #    ];
-    #  };
-    #};
   };
 
   # sops = {

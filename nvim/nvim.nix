@@ -62,6 +62,8 @@
     # TODO: Test this out e.g. with gitsigns and consider nvim-hlslens for search
     visuals.nvim-scrollbar.enable = true;
 
+    utility.diffview-nvim.enable = true;
+
     # TODO: Test the included packages and keybindings
     # gitsigns
     # hunk-nvim
@@ -219,6 +221,7 @@
         };
         setup = ''
           require('direnv-nvim').setup({
+            async = true,
             on_direnv_finished = function ()
               bufnr = vim.api.nvim_get_current_buf()
               if vim.bo[bufnr].filetype == "rust" then

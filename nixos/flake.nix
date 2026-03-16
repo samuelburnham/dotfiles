@@ -14,11 +14,10 @@
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.nixpkgs-unstable.follows = "nixpkgs";
     };
-    # Sops-nix for secrets management
-    #sops-nix = {
-    #  url = "github:Mic92/sops-nix";
-    #  inputs.nixpkgs.follows = "nixpkgs";
-    #};
+    sops-nix = {
+      url = "github:Mic92/sops-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   # TODO: Rewrite with flake-parts and/or Dendritic Nix
@@ -31,26 +30,38 @@
     ...
   } @ inputs: let
     system = "x86_64-linux";
-    pkgs = import nixpkgs {inherit system;};
     pkgs-unstable = import nixpkgs-unstable {inherit system;};
+    # Shared home-manager module config used by all hosts
+    homeManagerModule = hostHome: {
+      home-manager.useGlobalPkgs = true;
+      home-manager.useUserPackages = true;
+      home-manager.extraSpecialArgs = {inherit inputs pkgs-unstable;};
+      home-manager.users.sam = hostHome;
+      home-manager.backupFileExtension = "bak";
+    };
   in {
-    # Replace `nixos` with your hostname
-    nixosConfigurations.nixos = nixpkgs.lib.nixosSystem {
-      inherit system;
-      specialArgs = {inherit inputs pkgs-unstable;};
-      modules = [
-        # Import the previous configuration.nix we used,
-        # so the old configuration file still takes effect
-        ./configuration.nix
-        home-manager.nixosModules.home-manager
-        {
-          home-manager.useGlobalPkgs = true;
-          home-manager.useUserPackages = true;
-          home-manager.extraSpecialArgs = {inherit inputs pkgs-unstable;};
-          home-manager.users.sam = ./home.nix;
-          home-manager.backupFileExtension = "bak";
-        }
-      ];
+    nixosConfigurations = {
+      # Desktop — AMD, Gigabyte B650I
+      nixos = nixpkgs.lib.nixosSystem {
+        inherit system;
+        specialArgs = {inherit inputs pkgs-unstable;};
+        modules = [
+          ./hosts/desktop/default.nix
+          home-manager.nixosModules.home-manager
+          (homeManagerModule ./hosts/desktop/home.nix)
+        ];
+      };
+
+      # Laptop — Intel, MSI
+      nixbook = nixpkgs.lib.nixosSystem {
+        inherit system;
+        specialArgs = {inherit inputs pkgs-unstable;};
+        modules = [
+          ./hosts/laptop/default.nix
+          home-manager.nixosModules.home-manager
+          (homeManagerModule ./hosts/laptop/home.nix)
+        ];
+      };
     };
   };
 }
