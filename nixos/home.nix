@@ -81,9 +81,11 @@
 
   programs.git = {
     enable = true;
-    userName = "samuelburnham";
-    userEmail = "45365069+samuelburnham@users.noreply.github.com";
-    extraConfig = {
+    settings = {
+      user = {
+        name = "samuelburnham";
+        email = "45365069+samuelburnham@users.noreply.github.com";
+      };
       init.defaultBranch = "main";
     };
   };
