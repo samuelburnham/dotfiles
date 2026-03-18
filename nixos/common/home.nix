@@ -58,7 +58,7 @@
   programs.ghostty = {
     enable = true;
     settings = {
-      theme = "Builtin Solarized Dark";
+      theme = "iTerm2 Solarized Dark";
       shell-integration-features = "no-cursor";
       cursor-style = "bar";
       keybind = "shift+enter=text:\\n"; # Fixes Claude Code Shift+Enter newlines
