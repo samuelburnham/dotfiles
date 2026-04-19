@@ -47,16 +47,16 @@
     options.guicursor = "n-v-c-sm:block,i-ci-ve:ver25,r-cr-o:hor20,t:ver25-blinkon500-blinkoff500-TermCursor";
     vimAlias = true;
 
-    # Solarized dark theme
+    # Solarized theme, follows OS light/dark preference via auto-dark-mode.nvim
     theme = {
       enable = true;
       name = "solarized";
-      style = "dark";
+      style = "solarized";
     };
     # Modeline
     statusline.lualine = {
       enable = true;
-      theme = "solarized_dark";
+      theme = "auto";
     };
     visuals.rainbow-delimiters.enable = true;
     # TODO: Test this out e.g. with gitsigns and consider nvim-hlslens for search
@@ -205,6 +205,30 @@
     utility.direnv.enable = false;
 
     extraPlugins = {
+      auto-dark-mode = {
+        package = pkgs.vimUtils.buildVimPlugin {
+          pname = "auto-dark-mode.nvim";
+          version = "main";
+          src = pkgs.fetchFromGitHub {
+            owner = "f-person";
+            repo = "auto-dark-mode.nvim";
+            rev = "e300259ec777a40b4b9e3c8e6ade203e78d15881";
+            hash = "sha256-PhhOlq4byctWJ5rLe3cifImH56vR2+k3BZGDZdQvjng=";
+          };
+        };
+        setup = ''
+          require('auto-dark-mode').setup({
+            set_dark_mode = function()
+              vim.api.nvim_set_option_value('background', 'dark', {})
+              require('lualine').setup({ options = { theme = 'solarized_dark' } })
+            end,
+            set_light_mode = function()
+              vim.api.nvim_set_option_value('background', 'light', {})
+              require('lualine').setup({ options = { theme = 'solarized_light' } })
+            end,
+          })
+        '';
+      };
       # Enables loading rust-analyzer after direnv completes for Rust files in another directory
       # Otherwise rust-analyzer can't find the binary because direnv hasn't yet loaded it from the Nix flake
       # Lean doesn't have this issue, likely due to starting via autocmd rather than `vim.lsp.enable()`
