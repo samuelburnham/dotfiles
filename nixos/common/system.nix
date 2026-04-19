@@ -109,6 +109,8 @@
   # vim ~/.config/sops/age/keys.txt
   # ```
   # Then paste the contents, save, and rebuild NixOS
+  # Check encrypted file by opening `~/dotfiles/nixos/secrets/secrets.yaml`
+  # Open decrypted file by running `sops ~/dotfiles/nixos/secrets/secrets.yaml`
   sops.defaultSopsFile = ../secrets/secrets.yaml;
   sops.defaultSopsFormat = "yaml";
   sops.age.keyFile = "/home/sam/.config/sops/age/keys.txt";
@@ -116,6 +118,7 @@
   sops.secrets.nix-access-tokens = {};
 
   # GitHub PAT for authenticated nix fetches — decrypted at runtime by sops-nix
+  # This allows fetching private GitHub flake inputs with `github:org/name` URLs
   nix.extraOptions = ''
     !include ${config.sops.secrets.nix-access-tokens.path}
   '';
@@ -125,6 +128,7 @@
   environment.systemPackages = with pkgs; [
     wget
     git
+    sops
   ];
 
   environment.gnome.excludePackages = with pkgs; [

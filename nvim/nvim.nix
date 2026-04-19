@@ -793,6 +793,34 @@
         enable = false;
       };
     };
+
+    languages.markdown = {
+      enable = true;
+      format = {
+        enable = true;
+      };
+      lsp = {
+        enable = true;
+      };
+      extensions = {
+        render-markdown-nvim = {
+          enable = true;
+          setupOpts = {
+            anti_conceal = {
+              ignore = {
+                code_inline = true;
+              };
+            };
+            # Multiple `==` on the same line even within code blocks
+            # cause the whole line to highlight and conceal the `==` signs
+            # Switch to removing all highlights if desired
+            # inline_highlight = {
+            #   enabled = false;
+            # };
+          };
+        };
+      };
+    };
     # TODO: Modeline icons and general nerd font support (already installed in home.nix and supported by Ghostty)
     #utility.icon-picker.enable = true;
 

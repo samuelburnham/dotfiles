@@ -19,9 +19,6 @@ in {
     export PATH="$HOME/.cargo/bin:$PATH"
   '';
 
-  # Fixes Claude Code Shift+Enter newlines
-  programs.ghostty.settings.keybind = "shift+enter=text:\\n";
-
   services.podman = {
     enable = true;
     #builds = {
