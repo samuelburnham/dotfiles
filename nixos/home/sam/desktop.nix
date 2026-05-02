@@ -1,23 +1,19 @@
-# Desktop-specific home-manager configuration
+# sam@desktop — AMD, Gigabyte B650I
 {
   pkgs,
   inputs,
+  username,
   ...
-}: let
-  system = "x86_64-linux";
-in {
+}:
+{
   imports = [
-    ../../common/home.nix
+    ./base.nix
+    ./alias.nix
+    ./gnome.nix
   ];
 
-  home.packages = [
-    inputs.neovim.packages.${system}.default
-  ];
-
-  # Add Rust binaries to path, so `cargo install` works OOTB
-  programs.bash.bashrcExtra = ''
-    export PATH="$HOME/.cargo/bin:$PATH"
-  '';
+  home.username = username;
+  home.homeDirectory = "/home/${username}";
 
   services.podman = {
     enable = true;
@@ -40,8 +36,8 @@ in {
     #    #  EDITOR = "vim";
     #    #};
     #    volumes = [
-    #      #"${self.home.homeDirectory}/repos/argument/tests/templean:/workspace:rw"
-    #      "/home/sam/repos/argument/tests/templean:/home/ubuntu:rw"
+    #      #"${self.home.homeDirectory}/repos/tests/templean:/workspace:rw"
+    #      "/home/sam/repos/tests/templean:/home/ubuntu:rw"
     #    ];
 
     #    # Add network access, SSH forwarding, etc

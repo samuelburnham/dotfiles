@@ -4,8 +4,10 @@
   config,
   pkgs,
   inputs,
+  username,
   ...
-}: {
+}:
+{
   imports = [
     inputs.sops-nix.nixosModules.sops
   ];
@@ -17,7 +19,7 @@
     enable = true;
     efiSupport = true;
     useOSProber = true;
-    devices = ["nodev"];
+    devices = [ "nodev" ];
   };
   boot.loader.efi = {
     canTouchEfiVariables = true;
@@ -87,18 +89,24 @@
   # services.xserver.libinput.enable = true;
 
   # Define a user account. Don't forget to set a password with 'passwd'.
-  users.users.sam = {
+  users.users.${username} = {
     isNormalUser = true;
     description = "Sam Burnham";
-    extraGroups = ["networkmanager" "wheel"];
+    extraGroups = [
+      "networkmanager"
+      "wheel"
+    ];
   };
 
   # Allow unfree packages
   nixpkgs.config.allowUnfree = true;
 
   nix.settings = {
-    experimental-features = ["nix-command" "flakes"];
-    trusted-users = ["sam"];
+    experimental-features = [
+      "nix-command"
+      "flakes"
+    ];
+    trusted-users = [ username ];
   };
 
   # Secrets management with sops-nix
@@ -113,9 +121,9 @@
   # Open decrypted file by running `sops ~/dotfiles/nixos/secrets/secrets.yaml`
   sops.defaultSopsFile = ../secrets/secrets.yaml;
   sops.defaultSopsFormat = "yaml";
-  sops.age.keyFile = "/home/sam/.config/sops/age/keys.txt";
+  sops.age.keyFile = "/home/${username}/.config/sops/age/keys.txt";
 
-  sops.secrets.nix-access-tokens = {};
+  sops.secrets.nix-access-tokens = { };
 
   # GitHub PAT for authenticated nix fetches — decrypted at runtime by sops-nix
   # This allows fetching private GitHub flake inputs with `github:org/name` URLs
@@ -129,6 +137,7 @@
     wget
     git
     sops
+    vim
   ];
 
   environment.gnome.excludePackages = with pkgs; [
@@ -138,18 +147,12 @@
     gnome-music
   ];
 
-  programs.neovim = {
-    enable = true;
-    viAlias = true;
-    vimAlias = false;
-  };
-
-  environment.variables.EDITOR = "nvim";
+  environment.variables.EDITOR = "vim";
 
   # Increase `sudo` timeout to 30 minutes
   security.sudo.extraConfig = "Defaults timestamp_timeout=30";
 
-  programs.steam.enable = true;
+  programs.steam.enable = false;
 
   # Some programs need SUID wrappers, can be configured further or are
   # started in user sessions.

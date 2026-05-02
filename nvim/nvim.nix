@@ -6,8 +6,7 @@
 # Add some functionality borrowed from tmux like session persistence, SSH, and running a Neovim systemd server on startup. See https://kraust.github.io/posts/neovim-is-a-multiplexer/
 # Complete leader keybindings for common tasks (see Emacs config)
 # Obsidian.nvim or Neorg for note taking and project planning, with https://github.com/MeanderingProgrammer/render-markdown.nvim
-# Seem Emacs config for more options
-# Consider Neovide for GUI experience and to fully decouple from terminal
+# See Emacs config for more options
 # Keep an eye on Ghostty integration with Neovim, such as https://github.com/neovim/neovim/issues/33155 which would fix multiline copy-paste from `:terminal`
 # and probably other bugs like squashed text on window resize
 # awesome-nvf configurations:
@@ -31,7 +30,7 @@
 # This will jump between buffers as well. It's nice for going back after go to def or jumping around a file
 #
 # Visual mode
-# Follow which-key for key sequences, it's amazing
+# Follow which-key for key sequences, it's amazing. But increase menu popup time so it only shows after a second or two
 # gU/gu to uppercase or lowercase selection, g~ to toggle case
 # gc to toggle comment, gcc for the current line
 # gv to select last visual selection
@@ -42,7 +41,8 @@
   lib,
   inputs,
   ...
-}: {
+}:
+{
   vim = {
     options.guicursor = "n-v-c-sm:block,i-ci-ve:ver25,r-cr-o:hor20,t:ver25-blinkon500-blinkoff500-TermCursor";
     vimAlias = true;
@@ -52,26 +52,126 @@
       enable = true;
       name = "solarized";
       style = "solarized";
+      # Diff* overrides: give added/removed lines a visible bg instead of
+      # solarized.nvim's fg-only tint, and force Neogit's adds to green in
+      # dark mode (solarized.nvim ships them as blue). Registered in
+      # extraConfig so it's in place before `:colorscheme solarized` fires.
+      extraConfig = ''
+        vim.api.nvim_create_autocmd("ColorScheme", {
+          pattern = "solarized",
+          callback = function()
+            local palette = (vim.o.background == "light")
+              and require("solarized.palette.solarized-light")
+              or require("solarized.palette")
+            local c = palette[require("solarized").config.palette or "solarized"]
+            -- solarized's light mix_red/mix_green are nearly cream-on-cream;
+            -- substitute saturated pink/leaf-green there.
+            local is_light = vim.o.background == "light"
+            local red_bg   = is_light and "#f5c4c4" or c.mix_red
+            local green_bg = is_light and "#bfd9bc" or c.mix_green
+            -- DiffChange marks lines that have intra-line edits; DiffText
+            -- marks the exact changed span inside them. With the empty
+            -- DiffChange + bold-only DiffText we had before, single-word
+            -- edits showed no color at all (bold alone on black reads as
+            -- plain text). Give DiffChange a muted neutral bg and DiffText
+            -- a stronger tint so the changed chars pop against the line.
+            -- Orange/yellow for "changed" is the diff-UI convention and
+            -- avoids confusion with DiffAdd (green) / DiffDelete (red).
+            -- diffview.nvim applies the same DiffText to both sides of the
+            -- split, so a side-neutral accent is the only correct choice.
+            --
+            -- Dark-mode fg override: without an explicit fg, DiffText
+            -- inherits the underlying token's color — faded Comment gray
+            -- (base01 #586e75) on our warm-brown bg is barely legible.
+            -- Forcing fg = base3 (cream) ensures the changed chars pop
+            -- regardless of syntax class. Syntax colors are suppressed on
+            -- the changed span (one-line-diff tradeoff), but that's the
+            -- right call here: the point of DiffText is to scream "this
+            -- is what changed", not to preserve token coloring. Light
+            -- mode keeps the default fg — pale-yellow bg has enough
+            -- contrast with any solarized-light token color.
+            local change_bg = is_light and "#f5ebcc" or "#3C342C"
+            local text_bg   = is_light and "#e8cf79" or "#6b4a1f"
+            local text_fg   = is_light and nil or c.base3
+            local set = vim.api.nvim_set_hl
+            set(0, "DiffAdd",    { bg = green_bg })
+            set(0, "DiffDelete", { bg = red_bg, fg = c.red })
+            set(0, "DiffChange", { bg = change_bg })
+            set(0, "DiffText",   { bg = text_bg, fg = text_fg, bold = true })
+            pcall(function() require("diffview.hl").setup() end)
+            set(0, "NeogitDiffAdd",             { fg = c.green })
+            set(0, "NeogitDiffAddHighlight",    { fg = c.green, bg = green_bg })
+            set(0, "NeogitDiffAddInline",       { bg = green_bg, bold = true })
+            set(0, "NeogitDiffDelete",          { fg = c.red })
+            set(0, "NeogitDiffDeleteHighlight", { fg = c.red, bg = red_bg })
+            set(0, "NeogitDiffDeleteInline",    { bg = red_bg, bold = true })
+            -- solarized.nvim's dark palette maps git_add to blue (#268BD2),
+            -- which collides with the usual green=add / red=delete /
+            -- yellow=change convention and with our diffview palette above.
+            -- Canonical solarized green (#859900) is olive and barely
+            -- distinguishable from yellow (#B58900) as a sign-column fg in
+            -- either mode. Substitute selenized's greens — a darker
+            -- #489100 in light mode and a brighter #75b938 in dark mode —
+            -- so add vs change reads at a glance.
+            local sign_add = is_light and "#489100" or "#75b938"
+            set(0, "GitSignsAdd",    { fg = sign_add })
+            set(0, "GitSignsChange", { fg = c.yellow })
+            set(0, "GitSignsDelete", { fg = c.red })
+          end,
+        })
+      '';
     };
     # Modeline
     statusline.lualine = {
       enable = true;
       theme = "auto";
+      # solarized.nvim's lualine theme doesn't define `terminal`, so it falls
+      # back to normal (blue). Wrap the resolved theme and set terminal to cyan.
+      setupOpts.options.theme = lib.mkForce (
+        lib.generators.mkLuaInline ''
+          (function()
+            local name = vim.g.colors_name or 'auto'
+            local ok, theme = pcall(require, 'lualine.themes.' .. name)
+            if not ok then theme = require('lualine.themes.auto') end
+            theme.terminal = { a = { fg = '#002b36', bg = '#2aa198', gui = 'bold' } }
+            return theme
+          end)()
+        ''
+      );
     };
     visuals.rainbow-delimiters.enable = true;
     # TODO: Test this out e.g. with gitsigns and consider nvim-hlslens for search
     visuals.nvim-scrollbar.enable = true;
 
-    utility.diffview-nvim.enable = true;
+    utility.diffview-nvim = {
+      enable = true;
+      # Asymmetric red/green per side (matches the README preview): DiffAdd
+      # on the old buffer is win-remapped to a copy of DiffDelete.
+      setupOpts.enhanced_diff_hl = true;
+    };
 
-    # TODO: Test the included packages and keybindings
-    # gitsigns
-    # hunk-nvim
-    # vim-fugitive
-    # git-conflict
-    # gitlinker-nvim
-    #git.enable = true;
-    # Also look into NeogitOrg/neogit instead
+    # Passive visualization only — hunk staging, reset, and diffs go
+    # through Neogit/diffview. Flattened into the <leader>g namespace
+    # alongside the Neogit popups (gs/gw/gc/gl/gp).
+    git.gitsigns = {
+      enable = true;
+      mappings = {
+        stageHunk = null;
+        undoStageHunk = null;
+        resetHunk = null;
+        stageBuffer = null;
+        resetBuffer = null;
+        diffThis = null;
+        diffProject = null;
+        toggleDeleted = null;
+
+        # ]c/[c defaults retained — they fall through to vim's native
+        # next-change inside diff mode, and jump gitsigns hunks elsewhere.
+        previewHunk = "<leader>gh";
+        blameLine = "<leader>gb";
+        toggleBlame = "<leader>gB";
+      };
+    };
 
     # TODO: Image renders but overlaps with text
     # See https://github.com/3rd/image.nvim/issues/287, likely fixed upstream
@@ -98,6 +198,10 @@
           '';
         };
         picker.enabled = true;
+        bigfile.enabled = true;
+        quickfile.enabled = true;
+        indent.enabled = true;
+        words.enabled = true;
         # keys = [
         #   {
         #     key = "<leader><space>";
@@ -117,7 +221,7 @@
       kitty
     ];
 
-    # TODO: Don't make enter select_and_accept completion ever, just use Tab or C-Space to select
+    # TODO: Don't make enter select_and_accept completion ever, just use Tab or M-Space to select
     # Enter is for new line (in file) or <CR> in cmdline
     # TODO: Unify cmdline and file-based keybindings
     # blink-cmp autocompletion plugion
@@ -127,12 +231,29 @@
         signature.enabled = true;
         cmdline.enabled = true;
 
-        # Select and accept with `<C-space>`, close with `<C-e>`
+        # Completion trigger on Alt-Space; Ctrl-Space is reserved for tmux prefix
+        keymap = {
+          preset = "default";
+          "<C-space>" = [ "fallback" ];
+          "<M-space>" = [
+            "show"
+            "show_documentation"
+            "hide_documentation"
+          ];
+        };
+
+        # Select and accept with `<M-space>`, close with `<C-e>`
         cmdline.keymap = {
           preset = "default";
           # TODO: Tab select_and_accept doesn't work, not sure why
-          "<Tab>" = ["show" "accept"];
-          "<C-space>" = ["select_and_accept" "fallback"];
+          "<Tab>" = [
+            "show"
+            "accept"
+          ];
+          "<M-space>" = [
+            "select_and_accept"
+            "fallback"
+          ];
         };
         cmdline.completion.list.selection.auto_insert = false;
         cmdline.completion.list.selection.preselect = true;
@@ -159,6 +280,14 @@
           };
         };
       };
+      # nvf calls `telescope.load_extension('<name>')` in telescope's own
+      # after-hook, so no VimEnter autocmd needed. `packages` is empty because
+      # persisted-nvim is already in runtimepath via extraPlugins.
+      extensions = [
+        {
+          name = "persisted";
+        }
+      ];
     };
     # TODO:
     # Fix auto-refresh after running git commands from `:terminal`
@@ -169,6 +298,7 @@
         window = {
           mappings = {
             "<space>" = "none";
+            "q" = "close_window";
           };
         };
       };
@@ -184,7 +314,11 @@
           {
             filter = {
               event = "msg_show";
-              kind = ["shell_out" "shell_err" "shell_ret"];
+              kind = [
+                "shell_out"
+                "shell_err"
+                "shell_ret"
+              ];
             };
             view = "popup";
             opts = {
@@ -204,7 +338,35 @@
     # Use `direnv.nvim` instead for now to fix loading files from other directorie
     utility.direnv.enable = false;
 
+    # TODO: Contribute manually build Vim plugins to nixpkgs for auto-updates
     extraPlugins = {
+      # Vendored + patched copy of claudecode.nvim's snacks terminal provider.
+      # Removes the forced `startinsert` calls so the Claude buffer starts in
+      # normal mode (`i` to type, `<Esc>` reaches Claude for clearing prompt).
+      # Sync with upstream if claudecode.nvim bumps versions — see top of the
+      # .lua file for the patch notes.
+      claudecode-no-insert = {
+        package = pkgs.writeTextFile {
+          name = "claudecode-no-insert";
+          destination = "/lua/claudecode-no-insert.lua";
+          text = builtins.readFile ./claudecode-no-insert.lua;
+        };
+      };
+
+      # Preserve proportional window sizes when the outer terminal (Ghostty)
+      # resizes, so :terminal splits don't get squashed while regular buffers
+      # take up all the reclaimed space.
+      # Default register triggers (WinEnter/BufWinEnter). Avoid WinResized —
+      # it also fires during the outer Ghostty resize, so bufresize ends up
+      # registering the transient squashed layout and pins terminals at
+      # whatever width the mid-tile redistribution produced.
+      bufresize = {
+        package = pkgs.vimPlugins.bufresize-nvim;
+        setup = ''
+          require('bufresize').setup()
+        '';
+      };
+
       auto-dark-mode = {
         package = pkgs.vimUtils.buildVimPlugin {
           pname = "auto-dark-mode.nvim";
@@ -217,15 +379,24 @@
           };
         };
         setup = ''
+          -- solarized.nvim's lualine theme doesn't define `terminal` (falls
+          -- back to normal/blue). Override the entry to cyan.
+          local function with_terminal(theme_name)
+            local theme = require('lualine.themes.' .. theme_name)
+            theme.terminal = { a = { fg = '#002b36', bg = '#2aa198', gui = 'bold' } }
+            return theme
+          end
+          -- auto-dark-mode only sets vim.opt.background; re-run `:colorscheme`
+          -- so solarized.nvim re-applies its palette-dependent highlights
+          -- (ColorScheme also fires, so our Diff* overrides re-apply too).
+          local function apply(bg)
+            vim.api.nvim_set_option_value('background', bg, {})
+            vim.cmd.colorscheme('solarized')
+            require('lualine').setup({ options = { theme = with_terminal('solarized') } })
+          end
           require('auto-dark-mode').setup({
-            set_dark_mode = function()
-              vim.api.nvim_set_option_value('background', 'dark', {})
-              require('lualine').setup({ options = { theme = 'solarized_dark' } })
-            end,
-            set_light_mode = function()
-              vim.api.nvim_set_option_value('background', 'light', {})
-              require('lualine').setup({ options = { theme = 'solarized_light' } })
-            end,
+            set_dark_mode = function() apply('dark') end,
+            set_light_mode = function() apply('light') end,
           })
         '';
       };
@@ -282,6 +453,31 @@
           end
         '';
       };
+      # Persistent sessions per cwd, auto-restored on nvim startup
+      # Pairs with tmux-resurrect: resurrect preserves the pane's cwd,
+      # nvim relaunches there, persisted autoloads the matching session
+      persisted-nvim = {
+        package = pkgs-unstable.vimPlugins.persisted-nvim;
+        setup = ''
+          -- Autoload/autostart only inside boxvim ($BOXVIM set by the wrapper).
+          -- Host nvim doesn't auto-source session files (no poisoning vector
+          -- if a sandbox-written session ever got malicious) and doesn't
+          -- auto-write them (no clobbering boxvim's state from quick host
+          -- edits). Sessions still work manually via :Persisted load/start.
+          --
+          -- save_dir defaults to stdpath('data')/sessions/, which on both host
+          -- and boxvim resolves to /home/sam/.local/share/nvf/sessions/ (the
+          -- boxvim wrapper bind-mounts it so sessions persist across sandboxes
+          -- and are portable between the two environments).
+          local in_boxvim = vim.env.BOXVIM == "1"
+          require("persisted").setup({
+            save_dir = vim.fn.stdpath("data") .. "/sessions/",
+            autoload = in_boxvim,
+            autostart = in_boxvim,
+            use_git_branch = false,
+          })
+        '';
+      };
       # Vim launched from `:terminal` opens a buffer instead of vimception
       flatten = {
         package = pkgs-unstable.vimPlugins.flatten-nvim;
@@ -323,13 +519,30 @@
         setupModule = "lean";
         setupOpts = {
           mappings = true;
+          # Narrower than upstream's 1/3 default — still comfortable for
+          # goal state / hypotheses while leaving more room for code.
+          # Pairs with the `leaninfo` FileType autocmd below, which calls
+          # bufresize.resize_open() so the remaining width is redistributed
+          # proportionally across existing splits instead of smushing the
+          # rightmost one.
+          infoview.width = 0.25;
+          # Don't auto-open: lean.nvim is lazy-loaded by BufReadPre *.lean,
+          # so on session restore the infoview opens mid-layout — before
+          # the session script's `vert Nresize` commands finish — and
+          # `Infoview.__width` gets frozen against an interim
+          # `vim.o.columns`, leaving it stuck at ~minimum width. Toggle
+          # manually with <localleader>i.
+          infoview.autoopen = false;
         };
-        event = ["BufReadPre *.lean" "BufNewFile *.lean"];
+        event = [
+          "BufReadPre *.lean"
+          "BufNewFile *.lean"
+        ];
         keys = [
           # Restart Lean LSP in case it gets in a bad build state after `lake build` in the terminal
           {
             key = "<localleader>R";
-            mode = ["n"];
+            mode = [ "n" ];
             lua = true;
             action = ''
               function()
@@ -345,15 +558,186 @@
           }
         ];
       };
-      # TODO: Add dashboard-nvim to quickly open recent sessions on launch
-      # Session manager by folke that (mostly) works with Noice
-      "persistence.nvim" = {
-        package = pkgs-unstable.vimPlugins.persistence-nvim;
-        setupModule = "persistence";
+      # Claude Code integration — spawns the CLI in a Snacks terminal, supports diff review
+      "claudecode.nvim" = {
+        package = pkgs-unstable.vimPlugins.claudecode-nvim;
+        setupModule = "claudecode";
         setupOpts = {
-          dir = lib.generators.mkLuaInline "vim.fn.stdpath('data') .. '/sessions/' ";
+          terminal = {
+            # Custom provider: vendored snacks provider with startinsert calls
+            # removed. Lives in extraPlugins.claudecode-no-insert.
+            provider = lib.generators.mkLuaInline ''require("claudecode-no-insert")'';
+            # snacks forces winfixwidth=true on every left/right split (see
+            # snacks/win.lua M.new), which pins Claude's width and makes
+            # Ghostty resizes squash the other splits instead of Claude.
+            # Clear it on both the live window AND self.opts.wo so snacks's
+            # VimResized → update() → Snacks.util.wo(self.win, self.opts.wo)
+            # doesn't silently re-lock it.
+            snacks_win_opts = {
+              on_win = lib.generators.mkLuaInline ''
+                function(self)
+                  self.opts.wo.winfixwidth = false
+                  vim.wo[self.win].winfixwidth = false
+                end
+              '';
+            };
+          };
+          # Review diffs in a dedicated tab rather than squished alongside the
+          # existing window layout. close_window on reject of a new file
+          # cleans up the placeholder buffer.
+          diff_opts = {
+            layout = "vertical";
+            open_in_new_tab = true;
+            hide_terminal_in_new_tab = true;
+            on_new_file_reject = "close_window";
+          };
         };
-        event = ["BufReadPre"];
+        cmd = [
+          "ClaudeCode"
+          "ClaudeCodeFocus"
+          "ClaudeCodeSend"
+          "ClaudeCodeTreeAdd"
+          "ClaudeCodeAdd"
+          "ClaudeCodeSelectModel"
+          "ClaudeCodeDiffAccept"
+          "ClaudeCodeDiffDeny"
+        ];
+        keys = [
+          {
+            key = "<leader>ac";
+            mode = [ "n" ];
+            action = "<cmd>ClaudeCode<cr>";
+            desc = "Toggle Claude";
+          }
+          {
+            key = "<leader>af";
+            mode = [ "n" ];
+            action = "<cmd>ClaudeCodeFocus<cr>";
+            desc = "Focus Claude";
+          }
+          {
+            key = "<leader>ar";
+            mode = [ "n" ];
+            action = "<cmd>ClaudeCode --resume<cr>";
+            desc = "Resume Claude";
+          }
+          {
+            key = "<leader>aC";
+            mode = [ "n" ];
+            action = "<cmd>ClaudeCode --continue<cr>";
+            desc = "Continue Claude";
+          }
+          {
+            key = "<leader>am";
+            mode = [ "n" ];
+            action = "<cmd>ClaudeCodeSelectModel<cr>";
+            desc = "Select Claude model";
+          }
+          {
+            key = "<leader>ab";
+            mode = [ "n" ];
+            action = "<cmd>ClaudeCodeAdd %<cr>";
+            desc = "Add current buffer";
+          }
+          {
+            key = "<leader>as";
+            mode = [ "v" ];
+            action = "<cmd>ClaudeCodeSend<cr>";
+            desc = "Send to Claude";
+          }
+          # Accept/deny wrappers nudge Claude's pty size via jobresize to
+          # force a SIGWINCH-driven repaint after the diff tab closes.
+          # Without this, stale cells from the tab-switch transition bleed
+          # through: Claude TUI output and diff-pane line numbers end up
+          # overlaid (e.g. `Addedi1olinemmon/system.nix` — Claude's `Added
+          # 1 line to common/system.nix` interleaved with diff content).
+          # Ctrl-L alone wasn't enough — Claude's Ink-based TUI treats \12
+          # as input, not a redraw signal. jobresize(w-1,h) followed by
+          # jobresize(w,h) triggers two SIGWINCHes, which Ink handles by
+          # clearing and re-rendering the full frame. defer_fn (50ms)
+          # defers past claudecode's own cleanup (tabclose, terminal
+          # resize) and the window-layout settling that follows.
+          {
+            key = "<leader>aa";
+            mode = [ "n" ];
+            lua = true;
+            action = ''
+              function()
+                vim.cmd("ClaudeCodeDiffAccept")
+                vim.defer_fn(_G.ClaudeRepaint, 50)
+              end
+            '';
+            desc = "Accept diff";
+          }
+          {
+            key = "<leader>ad";
+            mode = [ "n" ];
+            lua = true;
+            action = ''
+              function()
+                vim.cmd("ClaudeCodeDiffDeny")
+                vim.defer_fn(_G.ClaudeRepaint, 50)
+              end
+            '';
+            desc = "Deny diff";
+          }
+        ];
+      };
+      # Magit-like git UI: status, commit/rebase/merge popups, worktree popup.
+      # Routes diffs through diffview.nvim (already enabled above) for proper
+      # side-by-side review of Claude's edits.
+      neogit = {
+        package = pkgs-unstable.vimPlugins.neogit;
+        setupModule = "neogit";
+        setupOpts = {
+          integrations = {
+            diffview = true;
+            telescope = true;
+            snacks = true;
+          };
+          # Open status as a vertical split to the left so it composes with
+          # existing layouts instead of taking the whole window
+          kind = "vsplit";
+          disable_commit_confirmation = false;
+        };
+        cmd = [
+          "Neogit"
+          "NeogitCommit"
+          "NeogitLogCurrent"
+          "NeogitResetState"
+        ];
+        keys = [
+          {
+            key = "<leader>gs";
+            mode = [ "n" ];
+            action = "<cmd>Neogit<cr>";
+            desc = "Neogit status";
+          }
+          {
+            key = "<leader>gw";
+            mode = [ "n" ];
+            action = "<cmd>Neogit worktree<cr>";
+            desc = "Neogit worktree popup";
+          }
+          {
+            key = "<leader>gc";
+            mode = [ "n" ];
+            action = "<cmd>Neogit commit<cr>";
+            desc = "Neogit commit popup";
+          }
+          {
+            key = "<leader>gl";
+            mode = [ "n" ];
+            action = "<cmd>Neogit log<cr>";
+            desc = "Neogit log popup";
+          }
+          {
+            key = "<leader>gp";
+            mode = [ "n" ];
+            action = "<cmd>Neogit push<cr>";
+            desc = "Neogit push popup";
+          }
+        ];
       };
     };
     clipboard = {
@@ -385,6 +769,13 @@
     # Swap buffers with <leader>ws+hjkl
     utility.smart-splits = {
       enable = true;
+      setupOpts = {
+        multiplexer_integration = "tmux";
+        # No-wrap: hitting C-l in the rightmost split (etc.) is a no-op
+        # rather than wrapping back to the leftmost. Matches the tmux-side
+        # no-wrap guards so the whole nav chain stops at outer edges.
+        at_edge = "stop";
+      };
       keymaps = {
         move_cursor_left = "<C-h>";
         move_cursor_down = "<C-j>";
@@ -419,6 +810,17 @@
     # Needed for bufferline's hover on tab event showing the close icon
     options.mousemoveevent = true;
 
+    # External-write handling for agentic Claude workflows.
+    # autoread: reload buffers whose files change externally without prompting.
+    # updatetime: default 4000ms is too slow for CursorHold-based reload
+    # detection; 250ms also makes LSP hovers/diagnostics feel snappier.
+    options.autoread = true;
+    options.updatetime = 250;
+
+    # Show dots for trailing whitespace and non-breaking spaces
+    options.list = true;
+    options.listchars = "trail:·,nbsp:·,tab:  ";
+
     mini.bufremove = {
       enable = true;
     };
@@ -428,7 +830,11 @@
     keymaps = [
       {
         key = "k";
-        mode = ["n" "v" "x"];
+        mode = [
+          "n"
+          "v"
+          "x"
+        ];
         action = "gk";
         # Executes command without displaying it on the command line
         silent = true;
@@ -436,14 +842,21 @@
       }
       {
         key = "j";
-        mode = ["n" "v" "x"];
+        mode = [
+          "n"
+          "v"
+          "x"
+        ];
         action = "gj";
         silent = true;
         desc = "Scroll down a visual line";
       }
       {
         key = "<leader><Tab>";
-        mode = ["n" "v"];
+        mode = [
+          "n"
+          "v"
+        ];
         action = ":b#<CR>";
         silent = true;
         # Description is shown by which-key on the leader popup
@@ -451,23 +864,77 @@
       }
       {
         key = "<leader>b/";
-        mode = ["n" "v"];
+        mode = [
+          "n"
+          "v"
+        ];
         action = ":vnew<CR>";
         silent = true;
         desc = "New buffer split right";
       }
       {
         key = "<leader>b-";
-        mode = ["n" "v"];
+        mode = [
+          "n"
+          "v"
+        ];
         action = ":new<CR>";
         silent = true;
         desc = "New buffer split below";
+      }
+      # C-hjkl is reserved for smart-splits pane navigation (normal mode
+      # only). In insert and terminal modes these keys would forward to
+      # tmux via send-keys and cause display corruption in :terminal
+      # buffers (e.g. Claude). Swallow them so the user has to leave
+      # insert/terminal mode first before navigating.
+      {
+        key = "<C-h>";
+        mode = [
+          "i"
+          "t"
+        ];
+        action = "<Nop>";
+        silent = true;
+        desc = "Disable pane-nav key in insert/terminal mode";
+      }
+      {
+        key = "<C-j>";
+        mode = [
+          "i"
+          "t"
+        ];
+        action = "<Nop>";
+        silent = true;
+        desc = "Disable pane-nav key in insert/terminal mode";
+      }
+      {
+        key = "<C-k>";
+        mode = [
+          "i"
+          "t"
+        ];
+        action = "<Nop>";
+        silent = true;
+        desc = "Disable pane-nav key in insert/terminal mode";
+      }
+      {
+        key = "<C-l>";
+        mode = [
+          "i"
+          "t"
+        ];
+        action = "<Nop>";
+        silent = true;
+        desc = "Disable pane-nav key in insert/terminal mode";
       }
       {
         # Deletes the buffer, prompting to save if changed
         # Based on https://github.com/folke/snacks.nvim/blob/main/lua/snacks/bufdelete.lua
         key = "<leader>bd";
-        mode = ["n" "v"];
+        mode = [
+          "n"
+          "v"
+        ];
         lua = true;
         action = ''
           function()
@@ -495,7 +962,10 @@
       }
       {
         key = "<leader>bD";
-        mode = ["n" "v"];
+        mode = [
+          "n"
+          "v"
+        ];
         lua = true;
         action = ''
           function()
@@ -507,135 +977,142 @@
       }
       {
         key = "<leader>bt";
-        mode = ["n" "v"];
+        mode = [
+          "n"
+          "v"
+        ];
         action = "<cmd>vsp | terminal<CR>";
         silent = true;
         desc = "Open terminal to the right";
       }
       {
         key = "<Esc>";
-        mode = ["t"];
+        mode = [ "t" ];
         action = "<C-\\><C-n>";
         silent = true;
         desc = "Exit terminal mode";
       }
       {
         key = "<leader>w/";
-        mode = ["n" "v"];
+        mode = [
+          "n"
+          "v"
+        ];
         action = ":vsp<CR>";
         silent = true;
         desc = "New window split right";
       }
       {
         key = "<leader>w-";
-        mode = ["n" "v"];
+        mode = [
+          "n"
+          "v"
+        ];
         action = ":sp<CR>";
         silent = true;
         desc = "New window split below";
       }
       {
         key = "<leader>wd";
-        mode = ["n" "v"];
+        mode = [
+          "n"
+          "v"
+        ];
         action = ":close<CR>";
         silent = true;
         desc = "Close window";
       }
       {
         key = "<Esc>";
-        mode = ["n"];
+        mode = [ "n" ];
         action = "<cmd>nohlsearch<CR>";
         silent = true;
         desc = "Turn off search highlighting";
       }
       {
         key = "<leader>t";
-        mode = ["n" "v"];
+        mode = [
+          "n"
+          "v"
+        ];
         action = ":Neotree<CR>";
         silent = true;
         desc = "Open filetree";
       }
       {
         key = "<leader>ut";
-        mode = ["n"];
+        mode = [ "n" ];
         action = ":UndotreeToggle<CR>";
         silent = true;
         desc = "Toggle Undo Tree";
       }
       {
         key = "<leader>sl";
-        mode = ["n"];
-        lua = true;
-        action = ''
-          function()
-            require("persistence").load({ last = true })
-          end
-        '';
-        silent = true;
-        desc = "Load last session";
-      }
-      {
-        key = "<leader>ss";
-        mode = ["n"];
-        lua = true;
-        action = ''
-          function()
-            require("persistence").select()
-          end
-        '';
-        silent = true;
-        desc = "Select session to load";
-      }
-      {
-        key = "<leader>sl";
-        mode = ["n"];
-        lua = true;
-        action = ''
-          function()
-            require("persistence").load()
-          end
-        '';
+        mode = [ "n" ];
+        action = ":Persisted load<CR>";
         silent = true;
         desc = "Load session for the current directory";
       }
       {
         key = "<leader>sL";
-        mode = ["n"];
-        lua = true;
-        action = ''
-          function()
-            require("persistence").load({ last = true })
-          end
-        '';
+        mode = [ "n" ];
+        action = ":Persisted load_last<CR>";
         silent = true;
         desc = "Load most recent session (global)";
       }
       {
-        key = "<leader>sd";
-        mode = ["n"];
-        lua = true;
-        action = ''
-          function()
-            require("persistence").stop()
-          end
-        '';
+        key = "<leader>ss";
+        mode = [ "n" ];
+        action = ":Persisted select<CR>";
         silent = true;
-        desc = "Disable persistence - don't save on exit";
+        desc = "Select session to load";
+      }
+      {
+        key = "<leader>sS";
+        mode = [ "n" ];
+        action = ":Persisted save<CR>";
+        silent = true;
+        desc = "Save current session now";
+      }
+      {
+        key = "<leader>st";
+        mode = [ "n" ];
+        action = ":Persisted toggle<CR>";
+        silent = true;
+        desc = "Toggle session (load/start/stop)";
+      }
+      {
+        key = "<leader>sq";
+        mode = [ "n" ];
+        action = ":Persisted stop<CR>";
+        silent = true;
+        desc = "Disable autosave for this session";
       }
       {
         key = "<leader>se";
-        mode = ["n"];
-        lua = true;
-        action = ''
-          function()
-            require("persistence").start()
-          end
-        '';
+        mode = [ "n" ];
+        action = ":Persisted start<CR>";
         silent = true;
-        desc = "Enable persistence - will save on exit";
+        desc = "Enable autosave for this session";
       }
       {
+        key = "<leader>sD";
+        mode = [ "n" ];
+        action = ":Persisted delete_current<CR>";
+        silent = true;
+        desc = "Delete current session";
+      }
+      {
+        key = "<leader>sd";
+        mode = [ "n" ];
+        action = ":Persisted delete<CR>";
+        silent = true;
+        desc = "Delete a session from a list";
+      }
+      # TODO: Snacks picker or telescope?
+      {
         key = "<leader><space>";
-        mode = ["n"];
+        mode = [ "n" ];
         lua = true;
         action = ''
           function()
@@ -647,7 +1124,7 @@
       }
       {
         key = "<leader>FB";
-        mode = ["n"];
+        mode = [ "n" ];
         lua = true;
         action = ''
           function() Snacks.picker.buffers() end
@@ -656,7 +1133,7 @@
       }
       {
         key = "<leader>FF";
-        mode = ["n"];
+        mode = [ "n" ];
         lua = true;
         action = ''
           function() Snacks.picker.files() end
@@ -665,7 +1142,7 @@
       }
       {
         key = "<leader>FP";
-        mode = ["n"];
+        mode = [ "n" ];
         lua = true;
         action = ''
           function() Snacks.picker.projects() end
@@ -677,7 +1154,10 @@
     binds.whichKey = {
       enable = true;
       register = {
+        "<leader>a" = "+AI/Claude Code";
         "<leader>b" = "+Buffers";
+        "<leader>g" = "+Git";
+        "<leader>s" = "+Sessions";
         "<leader>u" = "+Undo Tree";
         "<leader>l" = "+LSP";
         "<leader>w" = "+Windows";
@@ -706,9 +1186,14 @@
       # Breaks indentation of comments and new lines
       # Disabling along with the tabstop autcmd below means tabbing on newline won't auto-indent to previous line's indent
       treesitter.enable = false;
-      # Formats using alejandra v4.0.0
+      # Canonical output (same AST → same format) for minimal, stable diffs.
+      # Alejandra 4.0 preserves input line breaks, so multi-line lists stay
+      # multi-line even if they'd fit on one — Claude edits and hand-written
+      # expansions both lock in. nixfmt (RFC 166) is pure: always expands
+      # multi-item lists, no input-layout memory.
       format = {
         enable = true;
+        type = [ "nixfmt" ];
       };
       lsp = {
         enable = true;
@@ -719,8 +1204,8 @@
       {
         enable = true;
         desc = "Tabs into 2 spaces for Nix";
-        event = ["FileType"];
-        pattern = ["nix"];
+        event = [ "FileType" ];
+        pattern = [ "nix" ];
         callback = lib.generators.mkLuaInline ''
           function()
             vim.opt_local.shiftwidth =  2
@@ -731,8 +1216,61 @@
       }
       {
         enable = true;
+        # lean.nvim opens the infoview with `botright Xvsplit`, which steals
+        # width from the adjacent window only. With 3+ columns this squashes
+        # the rightmost one while the others stay put. bufresize's
+        # resize_open() re-reads the registered pre-split layout and applies
+        # proportional widths to every existing split, leaving the new
+        # infoview at its configured width. vim.schedule defers the call
+        # until after lean finishes its layout operations.
+        desc = "Proportionally rebalance splits when Lean infoview opens (instead of squashing the rightmost)";
+        event = [ "FileType" ];
+        pattern = [ "leaninfo" ];
+        callback = lib.generators.mkLuaInline ''
+          function()
+            vim.schedule(function()
+              pcall(require('bufresize').resize_open)
+            end)
+          end
+        '';
+      }
+      {
+        enable = true;
+        desc = "Trigger :checktime so buffers reload after external writes (Claude auto-accept, git pull, etc.)";
+        event = [
+          "BufEnter"
+          "FocusGained"
+          "CursorHold"
+          "CursorHoldI"
+        ];
+        pattern = [ "*" ];
+        command = "if mode() !~ '[cC]' | checktime | endif";
+      }
+      {
+        enable = true;
+        desc = "Format and save after external writes so Claude's auto-accept edits match project style";
+        event = [ "FileChangedShellPost" ];
+        pattern = [ "*" ];
+        # Route through conform so conform-registered formatters (alejandra
+        # for nix) win; fall back to the LSP for filetypes without a conform
+        # formatter. vim.lsp.buf.format directly would skip conform and pick
+        # up whatever the LSP ships with (e.g. nil's built-in nixfmt),
+        # producing a different style from :w.
+        callback = lib.generators.mkLuaInline ''
+          function(args)
+            local conform = require("conform")
+            local has_fmt = #conform.list_formatters(args.buf) > 0
+              or #vim.lsp.get_clients({bufnr = args.buf, method = "textDocument/formatting"}) > 0
+            if not has_fmt then return end
+            conform.format({bufnr = args.buf, async = false, lsp_format = "fallback"})
+            vim.api.nvim_buf_call(args.buf, function() vim.cmd.write() end)
+          end
+        '';
+      }
+      {
+        enable = true;
         desc = "Enter insert mode when starting terminal";
-        event = ["TermOpen"];
+        event = [ "TermOpen" ];
         callback = lib.generators.mkLuaInline ''
           function()
             vim.cmd("startinsert")
@@ -742,8 +1280,11 @@
       {
         enable = true;
         desc = "Enter insert mode and restore guicursor in terminal after Git buffer";
-        event = ["BufLeave"];
-        pattern = ["*COMMIT_EDITMSG" "*git-rebase-todo"];
+        event = [ "BufLeave" ];
+        pattern = [
+          "*COMMIT_EDITMSG"
+          "*git-rebase-todo"
+        ];
         callback = lib.generators.mkLuaInline ''
           function()
             vim.schedule(function()
@@ -757,25 +1298,128 @@
       }
       # Workaround due to Noice mangling swapfile messages in the UI on session restore
       # When opening a file otherwise, the swap message takes priority and prints correctly
+      # {
+      #   enable = true;
+      #   desc = "Disable Noice before loading session";
+      #   event = ["User"];
+      #   pattern = ["PersistedLoadPre"];
+      #   callback = lib.generators.mkLuaInline ''
+      #     function()
+      #       vim.cmd("Noice disable")
+      #     end
+      #   '';
+      # }
+      # {
+      #   enable = true;
+      #   desc = "Enable Noice after loading session";
+      #   event = ["User"];
+      #   pattern = ["PersistedLoadPost"];
+      #   callback = lib.generators.mkLuaInline ''
+      #     function()
+      #       vim.cmd("Noice enable")
+      #     end
+      #   '';
+      # }
+      # Sidebar-style buffers (neo-tree, undotree, Neogit*, Diffview*) don't
+      # round-trip through :mksession — the session would restore them as
+      # broken empty buffers. Pattern from persisted.nvim's README §Events.
+      # Neogit* covers NeogitStatus, NeogitPopup, NeogitLogView, NeogitDiffView,
+      # NeogitCommitView, NeogitStashView, NeogitRefsView, NeogitConsole,
+      # NeogitReflogView, NeogitCommitSelectView, NeogitGitCommandHistory.
+      # Diffview* covers DiffviewFiles (file panel) and DiffviewFileHistory.
+      #
+      # Also strips non-file buffers other than :terminal: snacks dashboard,
+      # snacks scratch, quickfix, help, prompt. These carry no recoverable
+      # state — on reload they'd reappear as empty windows and hide the
+      # files we actually care about. :terminal buffers are kept; nvim's
+      # sessionoptions include "terminal" by default, so the saved session
+      # reopens them as fresh shells in the original window layout.
       {
         enable = true;
-        desc = "Disable Noice before loading session";
-        event = ["User"];
-        pattern = ["PersistenceLoadPre"];
+        desc = "Strip sidebar + non-file buffers (keep :terminal) before persisted save";
+        event = [ "User" ];
+        pattern = [ "PersistedSavePre" ];
         callback = lib.generators.mkLuaInline ''
           function()
-            vim.cmd("Noice disable")
+            local strip = { "neo-tree", "undotree", "diff", "leaninfo" }
+            for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+              local ft = vim.bo[buf].filetype
+              local bt = vim.bo[buf].buftype
+              if (bt ~= "" and bt ~= "terminal")
+                or vim.tbl_contains(strip, ft)
+                or ft:match("^Neogit")
+                or ft:match("^Diffview")
+              then
+                vim.api.nvim_buf_delete(buf, { force = true })
+              end
+            end
           end
         '';
       }
       {
         enable = true;
-        desc = "Enable Noice after loading session";
-        event = ["User"];
-        pattern = ["PersistenceLoadPost"];
+        desc = "Claude Code: buffer-local <leader>as to add file from tree views";
+        event = [ "FileType" ];
+        pattern = [
+          "neo-tree"
+          "oil"
+          "netrw"
+        ];
         callback = lib.generators.mkLuaInline ''
           function()
-            vim.cmd("Noice enable")
+            vim.keymap.set("n", "<leader>as", "<cmd>ClaudeCodeTreeAdd<cr>", {
+              buffer = true,
+              desc = "Add file to Claude",
+            })
+          end
+        '';
+      }
+      # Snacks' terminal binds <Esc> (expr, mode=t) such that the first Esc
+      # within 200ms is *forwarded to the terminal* (Claude sees it and
+      # triggers chat:cancel) and only a second Esc calls stopinsert. Override
+      # buffer-locally to exit terminal mode immediately on a single Esc.
+      # FileType snacks_terminal (set at snacks/terminal.lua:34) narrows the
+      # autocmd to snacks-managed terminals; the `snacks_terminal` buf-var
+      # filter (set at snacks/terminal.lua:111) confirms it's specifically the
+      # Claude one. vim.schedule defers past snacks.win's own self:map() call
+      # (snacks/win.lua:898) so our buffer-local keymap wins.
+      {
+        enable = true;
+        desc = "Claude Code: single-Esc exits terminal mode (override snacks double-esc)";
+        event = [ "FileType" ];
+        pattern = [ "snacks_terminal" ];
+        callback = lib.generators.mkLuaInline ''
+          function(args)
+            local bufnr = args.buf
+            vim.schedule(function()
+              local st = vim.b[bufnr].snacks_terminal
+              if type(st) == "table" and st.cmd and tostring(st.cmd):match("claude") then
+                vim.keymap.set("t", "<Esc>", function()
+                  vim.api.nvim_feedkeys(
+                    vim.api.nvim_replace_termcodes("<C-\\><C-n>", true, false, true),
+                    "n",
+                    false
+                  )
+                end, {
+                  buffer = bufnr,
+                  desc = "Exit terminal mode (override snacks)",
+                })
+                -- Single Esc exits terminal mode (above) before Claude can
+                -- see it, so chat:cancel never fires. <C-g> writes a raw
+                -- Esc byte (\27) directly to the pty via chansend, bypassing
+                -- nvim's keymap layer entirely — the Esc keymap above can't
+                -- swallow it, and the key stays in terminal mode. Claude's
+                -- readline treats it as cancel-current-turn. <C-c> is avoided
+                -- because it SIGINTs the CLI, wiping the in-progress prompt.
+                vim.keymap.set("t", "<C-g>", function()
+                  local chan = vim.b[bufnr].terminal_job_id
+                  if chan then vim.api.nvim_chan_send(chan, "\27") end
+                end, {
+                  buffer = bufnr,
+                  desc = "Cancel Claude request",
+                })
+              end
+            end)
           end
         '';
       }
@@ -826,6 +1470,47 @@
 
     luaConfigRC.config-dir = ''
       require("config")
+    '';
+
+    # Route :terminal-launched editor invocations (git commit, fzf, etc.)
+    # back through flatten.nvim. system.nix sets a system-wide EDITOR=vim
+    # which spawns the real vim binary — flatten is nvim-only, so the
+    # child ignores the parent's NVIM socket and a full TUI opens in the
+    # terminal pane. vim.env scopes the override to this nvim and its
+    # subprocesses, leaving the system-level EDITOR untouched.
+    #
+    # The serverstart fallback covers the rare case where the auto-server
+    # didn't come up at boot (e.g. the wrapper's $NVIM_LISTEN_ADDRESS
+    # collided with a stale socket). Without v:servername, :terminal
+    # can't export $NVIM and flatten opens nested nvim on git commit.
+    luaConfigRC.editor-env = ''
+      vim.env.EDITOR = "nvim"
+      if vim.v.servername == "" then
+        pcall(vim.fn.serverstart)
+      end
+    '';
+
+    # Global helper used by <leader>aa / <leader>ad (see keys above) to
+    # force Claude's TUI to repaint after a diff tab closes. See comment
+    # block above those keys for the full rationale.
+    luaConfigRC.claude-repaint = ''
+      function _G.ClaudeRepaint()
+        for _, win in ipairs(vim.api.nvim_list_wins()) do
+          local buf = vim.api.nvim_win_get_buf(win)
+          local st = vim.b[buf].snacks_terminal
+          if type(st) == "table" and st.cmd and tostring(st.cmd):match("claude") then
+            local chan = vim.b[buf].terminal_job_id
+            local w, h = vim.api.nvim_win_get_width(win), vim.api.nvim_win_get_height(win)
+            if chan then
+              vim.fn.jobresize(chan, w - 1, h)
+              vim.fn.jobresize(chan, w, h)
+            end
+            vim.api.nvim_set_current_win(win)
+            vim.cmd("startinsert")
+            return
+          end
+        end
+      end
     '';
   };
 }

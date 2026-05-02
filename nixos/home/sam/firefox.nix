@@ -5,7 +5,8 @@
   pkgs,
   lib,
   ...
-}: {
+}:
+{
   programs.firefox = {
     enable = true;
     policies = {
@@ -16,7 +17,10 @@
       search = {
         force = true;
         default = "ddg";
-        order = ["ddg" "google"];
+        order = [
+          "ddg"
+          "google"
+        ];
       };
       # about:config settings
       settings = {
@@ -92,16 +96,49 @@
         # Toolbar layout
         "browser.uiCustomization.state" = builtins.toJSON {
           placements = {
-            widget-overflow-fixed-list = [];
+            widget-overflow-fixed-list = [ ];
             # "_446900e4-71c2-419f-a6a7-df9c091e268b_-browser-action" = Bitwarden
-            nav-bar = ["sidebar-button" "back-button" "forward-button" "stop-reload-button" "vertical-spacer" "customizableui-special-spring1" "urlbar-container" "customizableui-special-spring2" "open-file-button" "downloads-button" "_446900e4-71c2-419f-a6a7-df9c091e268b_-browser-action" "addon_darkreader_org-browser-action" "ublock0_raymondhill_net-browser-action" "unified-extensions-button" "reset-pbm-toolbar-button" "firefox-view-button" "alltabs-button"];
-            toolbar-menubar = ["menubar-items"];
-            TabsToolbar = [];
-            vertical-tabs = ["tabbrowser-tabs"];
-            PersonalToolbar = ["personal-bookmarks"];
+            nav-bar = [
+              "sidebar-button"
+              "back-button"
+              "forward-button"
+              "stop-reload-button"
+              "vertical-spacer"
+              "customizableui-special-spring1"
+              "urlbar-container"
+              "customizableui-special-spring2"
+              "open-file-button"
+              "downloads-button"
+              "_446900e4-71c2-419f-a6a7-df9c091e268b_-browser-action"
+              "addon_darkreader_org-browser-action"
+              "ublock0_raymondhill_net-browser-action"
+              "unified-extensions-button"
+              "reset-pbm-toolbar-button"
+              "firefox-view-button"
+              "alltabs-button"
+            ];
+            toolbar-menubar = [ "menubar-items" ];
+            TabsToolbar = [ ];
+            vertical-tabs = [ "tabbrowser-tabs" ];
+            PersonalToolbar = [ "personal-bookmarks" ];
           };
-          seen = ["save-to-pocket-button" "developer-button" "_446900e4-71c2-419f-a6a7-df9c091e268b_-browser-action" "addon_darkreader_org-browser-action" "ublock0_raymondhill_net-browser-action" "nordvpnproxy_nordvpn_com-browser-action" "screenshot-button"];
-          dirtyAreaCache = ["unified-extensions-area" "nav-bar" "PersonalToolbar" "toolbar-menubar" "TabsToolbar" "vertical-tabs"];
+          seen = [
+            "save-to-pocket-button"
+            "developer-button"
+            "_446900e4-71c2-419f-a6a7-df9c091e268b_-browser-action"
+            "addon_darkreader_org-browser-action"
+            "ublock0_raymondhill_net-browser-action"
+            "nordvpnproxy_nordvpn_com-browser-action"
+            "screenshot-button"
+          ];
+          dirtyAreaCache = [
+            "unified-extensions-area"
+            "nav-bar"
+            "PersonalToolbar"
+            "toolbar-menubar"
+            "TabsToolbar"
+            "vertical-tabs"
+          ];
           currentVersion = 23;
           newElementCount = 2;
         };
@@ -110,10 +147,10 @@
   };
 
   xdg.mimeApps.defaultApplications = {
-    "text/html" = ["firefox.desktop"];
-    "text/xml" = ["firefox.desktop"];
-    "x-scheme-handler/http" = ["firefox.desktop"];
-    "x-scheme-handler/https" = ["firefox.desktop"];
-    "application/pdf" = ["firefox.desktop"];
+    "text/html" = [ "firefox.desktop" ];
+    "text/xml" = [ "firefox.desktop" ];
+    "x-scheme-handler/http" = [ "firefox.desktop" ];
+    "x-scheme-handler/https" = [ "firefox.desktop" ];
+    "application/pdf" = [ "firefox.desktop" ];
   };
 }

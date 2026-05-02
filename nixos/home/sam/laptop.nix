@@ -1,17 +1,21 @@
-# Laptop-specific home-manager configuration
+# sam@laptop — Intel, MSI
 {
   pkgs,
   inputs,
+  username,
   ...
-}: let
-  system = "x86_64-linux";
-in {
+}:
+{
   imports = [
-    ../../common/home.nix
+    ./base.nix
+    ./alias.nix
+    ./gnome.nix
   ];
 
+  home.username = username;
+  home.homeDirectory = "/home/${username}";
+
   home.packages = with pkgs; [
-    inputs.neovim.packages.${system}.default
     thunderbird
     # Gaming overlay for FPS, temps, CPU/GPU load
     mangohud
@@ -36,7 +40,7 @@ in {
     };
     # Laptop-specific keybind
     "org/gnome/desktop/wm/keybindings" = {
-      close = ["<Shift><Control>w"];
+      close = [ "<Shift><Control>w" ];
     };
     "org/gnome/desktop/notifications/application/spotify" = {
       enable = false;

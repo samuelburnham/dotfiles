@@ -4,12 +4,21 @@
   config,
   pkgs,
   ...
-}: {
+}:
+{
   imports = [
     ../../common/system.nix
     ./hardware-configuration.nix
   ];
 
+  # Renaming this breaks `rebuild` until bootstrapped: `nixos-rebuild
+  # switch` resolves `nixosConfigurations.<hostname>` by default, so a
+  # new name here must be mirrored in the flake's `nixosConfigurations`
+  # key (nixos/flake.nix) in the same commit. After the rename, run
+  # the first switch with the new key explicit, e.g.
+  #   nixos-rebuild switch --flake /home/sam/repos/dotfiles/nixos#newname --sudo
+  # (or run `sudo hostname newname` first so the default lookup hits
+  # the new key). Subsequent `rebuild` invocations work normally.
   networking.hostName = "nixbook";
 
   # TODO: Add battery percentage to top bar in Gnome
@@ -24,7 +33,10 @@
     }
   ];
   # Suspend with s2idle for fast resume, then hibernate (suspend-to-disk) after 30 min for low power mode. Requires pressing the power button to wake up
-  boot.kernelParams = ["mem_sleep_default=s2idle" "resume_offset=14559232"];
+  boot.kernelParams = [
+    "mem_sleep_default=s2idle"
+    "resume_offset=14559232"
+  ];
   # UUID of root ext4 partition
   boot.resumeDevice = "/dev/disk/by-uuid/e1746389-93c2-4f21-8086-f3b5e685413b";
 
@@ -53,18 +65,20 @@
   # Remap Caps Lock to Esc on tap, Ctrl on hold/chord
   # Not useful for Kinesis keyboard (desktop), but great for laptop keyboard
   # From https://discourse.nixos.org/t/best-way-to-remap-caps-lock-to-esc-with-wayland/39707/6
-  services.interception-tools = let
-    itools = pkgs.interception-tools;
-    itools-caps = pkgs.interception-tools-plugins.caps2esc;
-  in {
-    enable = true;
-    plugins = [itools-caps];
-    # requires explicit paths: https://github.com/NixOS/nixpkgs/issues/126681
-    udevmonConfig = pkgs.lib.mkDefault ''
-      - JOB: "${itools}/bin/intercept -g $DEVNODE | ${itools-caps}/bin/caps2esc -m 1 | ${itools}/bin/uinput -d $DEVNODE"
-        DEVICE:
-          EVENTS:
-            EV_KEY: [KEY_CAPSLOCK, KEY_ESC]
-    '';
-  };
+  services.interception-tools =
+    let
+      itools = pkgs.interception-tools;
+      itools-caps = pkgs.interception-tools-plugins.caps2esc;
+    in
+    {
+      enable = true;
+      plugins = [ itools-caps ];
+      # requires explicit paths: https://github.com/NixOS/nixpkgs/issues/126681
+      udevmonConfig = pkgs.lib.mkDefault ''
+        - JOB: "${itools}/bin/intercept -g $DEVNODE | ${itools-caps}/bin/caps2esc -m 1 | ${itools}/bin/uinput -d $DEVNODE"
+          DEVICE:
+            EVENTS:
+              EV_KEY: [KEY_CAPSLOCK, KEY_ESC]
+      '';
+    };
 }
