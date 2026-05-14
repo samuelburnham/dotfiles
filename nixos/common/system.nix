@@ -125,6 +125,12 @@
 
   sops.secrets.nix-access-tokens = { };
 
+  # gh PAT, read by the user's shell rc and exported as GH_TOKEN.
+  sops.secrets.gh-token = {
+    mode = "0400";
+    owner = username;
+  };
+
   # GitHub PAT for authenticated nix fetches — decrypted at runtime by sops-nix
   # This allows fetching private GitHub flake inputs with `github:org/name` URLs
   nix.extraOptions = ''

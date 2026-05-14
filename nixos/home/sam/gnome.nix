@@ -2,7 +2,7 @@
 # GNOME desktop (see hosts/desktop, hosts/laptop). Bundles the GNOME
 # dconf/extensions config, GUI applications, Firefox profile, Ghostty
 # terminal, GNOME-app MIME defaults, the local-path sandboxed nvim
-# wrapper (hot-reload against ~/repos/dotfiles/nvim), and rootless
+# wrapper (hot-reload against ~/repos/dotfiles/apps), and rootless
 # Podman. Ubuntu-style remote hosts don't import this.
 {
   pkgs,
@@ -42,17 +42,20 @@
       imagemagick
       ghostscript
       inkscape
-      # `nvim` = the sandboxed editor from the standalone nvim flake.
-      # Each invocation resolves the current ~/repos/dotfiles/nvim flake state,
+      # Search backend for the pop-shell launcher (Super+/); the extension
+      # alone is just the UI and returns nothing without this daemon.
+      pop-launcher
+      # `nvim` = the sandboxed editor from the standalone apps flake.
+      # Each invocation resolves the current ~/repos/dotfiles/apps flake state,
       # so changes to plugins/config take effect without any profile upgrade.
       # System editor ($EDITOR) stays as plain `vim` for git commit messages etc.
       # Uses the local repo path; ubuntu host points at the github copy instead.
       (pkgs.writeShellScriptBin "nvim" ''
-        exec ${pkgs.nix}/bin/nix run ${config.home.homeDirectory}/repos/dotfiles/nvim#nvim -- "$@"
+        exec ${pkgs.nix}/bin/nix run ${config.home.homeDirectory}/repos/dotfiles/apps#nvim -- "$@"
       '')
     ]
     ++ (with pkgs.gnomeExtensions; [
-      tiling-shell
+      pop-shell
       caffeine
       # Official Gnome top bar display for CPU, RAM, swap, and network usage
       system-monitor
@@ -62,6 +65,16 @@
       auto-move-windows
     ]);
 
+  # Shell alias rather than a writeShellScriptBin wrapper because
+  # `pkgs-master.claude-code` (base.nix) already provides ~/.nix-profile/bin/claude
+  # and home-manager errors on a duplicate `claude` from a wrapper. The alias
+  # only fires in interactive shells, so scripts (e.g. wt's commit-message
+  # generator in base.nix) and other subprocesses still get the bare host
+  # binary — matches the threat model: sandbox the *interactive* sessions you
+  # launch yourself, leave one-shot tooling alone.
+  programs.bash.shellAliases.claude =
+    "nix run ${config.home.homeDirectory}/repos/dotfiles/apps#claude --";
+
   # Get file with searchable terminal output using Ctrl+Shift+J
   programs.ghostty = {
     enable = true;
@@ -69,7 +82,14 @@
       theme = "dark:iTerm2 Solarized Dark,light:iTerm2 Solarized Light";
       shell-integration-features = "no-cursor";
       cursor-style = "bar";
-      keybind = "shift+enter=text:\\n"; # Fixes Claude Code Shift+Enter newlines
+      # New shells start in ~/repos rather than $HOME. Matters because
+      # boxvim/boxclaude refuse to launch from $HOME (would shadow the
+      # per-subdir bind overlays with a wholesale home mount).
+      working-directory = "${config.home.homeDirectory}/repos";
+      # CSI u sequence (\e[13;2u = Shift+Enter under fixterms/kitty
+      # keyboard protocol) survives tmux's `extended-keys on` passthrough,
+      # which a raw `\n` byte does not — tmux silently drops the raw form.
+      keybind = "shift+enter=text:\\x1b[13;2u";
     };
   };
 
@@ -96,35 +116,42 @@
   dconf = {
     enable = true;
     settings = {
-      # TODO: Configure the selected layouts, though it will vary by monitors
-      "org/gnome/shell/extensions/tilingshell" = {
-        move-window-down = [ "<Super>x" ];
-        move-window-left = [ "<Super>a" ];
-        move-window-right = [ "<Super>d" ];
-        move-window-up = [ "<Super>w" ];
-        # TODO: Customize layouts, match to number of fixed workspaces
-        selected-layouts = [
-          [
-            "Layout 4"
-            "Layout 3"
-          ]
-          [
-            "Layout 4"
-            "Layout 3"
-          ]
-          [
-            "Layout 4"
-            "Layout 3"
-          ]
-          [
-            "Layout 4"
-            "Layout 3"
-          ]
-        ];
+      "org/gnome/shell/extensions/pop-shell" = {
+        tile-by-default = true;
+        active-hint = true;
+        # Translucent blue accent — subtle in both light and dark mode.
+        hint-color-rgba = "rgba(53, 132, 228, 0.4)";
+        focus-down = [ "<Super>j" ];
+        focus-left = [ "<Super>h" ];
+        focus-right = [ "<Super>l" ];
+        focus-up = [ "<Super>k" ];
+        tile-enter = [ "<Super>BackSpace" ];
+        tile-move-down = [ "<Shift>j" ];
+        tile-move-left = [ "<Shift>h" ];
+        tile-move-right = [ "<Shift>l" ];
+        tile-move-up = [ "<Shift>k" ];
+        tile-resize-down = [ "j" ];
+        tile-resize-left = [ "h" ];
+        tile-resize-right = [ "l" ];
+        tile-resize-up = [ "k" ];
+        tile-swap-down = [ "<Primary>j" ];
+        tile-swap-left = [ "<Primary>h" ];
+        tile-swap-right = [ "<Primary>l" ];
+        tile-swap-up = [ "<Primary>k" ];
+        # Pop-shell's tree-aware cross-monitor move; the GNOME-native
+        # move-to-monitor-* equivalents fight the auto-tiler (window
+        # snaps back to its old monitor) so they're cleared below.
+        pop-monitor-up = [ "<Shift><Super>Up" ];
+        pop-monitor-down = [ "<Shift><Super>Down" ];
+        pop-monitor-left = [ ];
+        pop-monitor-right = [ ];
+        pop-workspace-down = [ ];
+        pop-workspace-up = [ ];
       };
       "org/gnome/desktop/wm/keybindings" = {
-        move-to-monitor-down = [ "<Shift><Super>x" ];
-        move-to-monitor-up = [ "<Shift><Super>w" ];
+        # Cleared in favor of pop-monitor-up/down above (pop-shell tree-aware).
+        move-to-monitor-down = [ ];
+        move-to-monitor-up = [ ];
         # TODO: This is set but not working on laptop
         move-to-workspace-left = [ "<Shift><Super>Left" ];
         move-to-workspace-right = [ "<Shift><Super>Right" ];
@@ -140,14 +167,17 @@
         #close = ["<Shift><Control>w"];
         toggle-fullscreen = [ "<Alt><Super>f" ];
         activate-window-menu = [ "<Super>equal" ];
+        # Freed for pop-shell focus-left (<Super>h).
+        minimize = [ ];
       };
       "org/gnome/shell/keybindings" = {
         toggle-application-view = [ "<Super>Tab" ];
       };
-      # TODO: Integrate this with tiling-shell, or toggle 50/50 layout
+      # Cleared so <Super>Left/Right reach switch-to-workspace-left/right
+      # instead of mutter's half-screen snap (the default).
       "org/gnome/mutter/keybindings" = {
-        toggle-tiled-left = [ "<Shift><Super>h" ];
-        toggle-tiled-right = [ "<Shift><Super>l" ];
+        toggle-tiled-left = [ ];
+        toggle-tiled-right = [ ];
       };
       "org/gnome/mutter" = {
         dynamic-workspaces = false;
@@ -161,10 +191,12 @@
         custom-keybindings = [
           "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/"
         ];
+        # Freed for pop-shell focus-right (<Super>l).
+        screensaver = [ ];
       };
       "org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0" = {
         binding = "<Control><Alt>t";
-        command = "ghostty --working-directory=${config.home.homeDirectory}/repos";
+        command = "ghostty";
         name = "Launch Terminal";
       };
       "org/gnome/shell" = {

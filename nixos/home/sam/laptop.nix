@@ -29,7 +29,7 @@
   dconf.settings = {
     "org/gnome/shell" = {
       enabled-extensions = with pkgs.gnomeExtensions; [
-        tiling-shell.extensionUuid
+        pop-shell.extensionUuid
         caffeine.extensionUuid
         system-monitor.extensionUuid
         vitals.extensionUuid

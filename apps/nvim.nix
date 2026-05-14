@@ -340,19 +340,6 @@
 
     # TODO: Contribute manually build Vim plugins to nixpkgs for auto-updates
     extraPlugins = {
-      # Vendored + patched copy of claudecode.nvim's snacks terminal provider.
-      # Removes the forced `startinsert` calls so the Claude buffer starts in
-      # normal mode (`i` to type, `<Esc>` reaches Claude for clearing prompt).
-      # Sync with upstream if claudecode.nvim bumps versions — see top of the
-      # .lua file for the patch notes.
-      claudecode-no-insert = {
-        package = pkgs.writeTextFile {
-          name = "claudecode-no-insert";
-          destination = "/lua/claudecode-no-insert.lua";
-          text = builtins.readFile ./claudecode-no-insert.lua;
-        };
-      };
-
       # Preserve proportional window sizes when the outer terminal (Ghostty)
       # resizes, so :terminal splits don't get squashed while regular buffers
       # take up all the reclaimed space.
@@ -558,134 +545,9 @@
           }
         ];
       };
-      # Claude Code integration — spawns the CLI in a Snacks terminal, supports diff review
-      "claudecode.nvim" = {
-        package = pkgs-unstable.vimPlugins.claudecode-nvim;
-        setupModule = "claudecode";
-        setupOpts = {
-          terminal = {
-            # Custom provider: vendored snacks provider with startinsert calls
-            # removed. Lives in extraPlugins.claudecode-no-insert.
-            provider = lib.generators.mkLuaInline ''require("claudecode-no-insert")'';
-            # snacks forces winfixwidth=true on every left/right split (see
-            # snacks/win.lua M.new), which pins Claude's width and makes
-            # Ghostty resizes squash the other splits instead of Claude.
-            # Clear it on both the live window AND self.opts.wo so snacks's
-            # VimResized → update() → Snacks.util.wo(self.win, self.opts.wo)
-            # doesn't silently re-lock it.
-            snacks_win_opts = {
-              on_win = lib.generators.mkLuaInline ''
-                function(self)
-                  self.opts.wo.winfixwidth = false
-                  vim.wo[self.win].winfixwidth = false
-                end
-              '';
-            };
-          };
-          # Review diffs in a dedicated tab rather than squished alongside the
-          # existing window layout. close_window on reject of a new file
-          # cleans up the placeholder buffer.
-          diff_opts = {
-            layout = "vertical";
-            open_in_new_tab = true;
-            hide_terminal_in_new_tab = true;
-            on_new_file_reject = "close_window";
-          };
-        };
-        cmd = [
-          "ClaudeCode"
-          "ClaudeCodeFocus"
-          "ClaudeCodeSend"
-          "ClaudeCodeTreeAdd"
-          "ClaudeCodeAdd"
-          "ClaudeCodeSelectModel"
-          "ClaudeCodeDiffAccept"
-          "ClaudeCodeDiffDeny"
-        ];
-        keys = [
-          {
-            key = "<leader>ac";
-            mode = [ "n" ];
-            action = "<cmd>ClaudeCode<cr>";
-            desc = "Toggle Claude";
-          }
-          {
-            key = "<leader>af";
-            mode = [ "n" ];
-            action = "<cmd>ClaudeCodeFocus<cr>";
-            desc = "Focus Claude";
-          }
-          {
-            key = "<leader>ar";
-            mode = [ "n" ];
-            action = "<cmd>ClaudeCode --resume<cr>";
-            desc = "Resume Claude";
-          }
-          {
-            key = "<leader>aC";
-            mode = [ "n" ];
-            action = "<cmd>ClaudeCode --continue<cr>";
-            desc = "Continue Claude";
-          }
-          {
-            key = "<leader>am";
-            mode = [ "n" ];
-            action = "<cmd>ClaudeCodeSelectModel<cr>";
-            desc = "Select Claude model";
-          }
-          {
-            key = "<leader>ab";
-            mode = [ "n" ];
-            action = "<cmd>ClaudeCodeAdd %<cr>";
-            desc = "Add current buffer";
-          }
-          {
-            key = "<leader>as";
-            mode = [ "v" ];
-            action = "<cmd>ClaudeCodeSend<cr>";
-            desc = "Send to Claude";
-          }
-          # Accept/deny wrappers nudge Claude's pty size via jobresize to
-          # force a SIGWINCH-driven repaint after the diff tab closes.
-          # Without this, stale cells from the tab-switch transition bleed
-          # through: Claude TUI output and diff-pane line numbers end up
-          # overlaid (e.g. `Addedi1olinemmon/system.nix` — Claude's `Added
-          # 1 line to common/system.nix` interleaved with diff content).
-          # Ctrl-L alone wasn't enough — Claude's Ink-based TUI treats \12
-          # as input, not a redraw signal. jobresize(w-1,h) followed by
-          # jobresize(w,h) triggers two SIGWINCHes, which Ink handles by
-          # clearing and re-rendering the full frame. defer_fn (50ms)
-          # defers past claudecode's own cleanup (tabclose, terminal
-          # resize) and the window-layout settling that follows.
-          {
-            key = "<leader>aa";
-            mode = [ "n" ];
-            lua = true;
-            action = ''
-              function()
-                vim.cmd("ClaudeCodeDiffAccept")
-                vim.defer_fn(_G.ClaudeRepaint, 50)
-              end
-            '';
-            desc = "Accept diff";
-          }
-          {
-            key = "<leader>ad";
-            mode = [ "n" ];
-            lua = true;
-            action = ''
-              function()
-                vim.cmd("ClaudeCodeDiffDeny")
-                vim.defer_fn(_G.ClaudeRepaint, 50)
-              end
-            '';
-            desc = "Deny diff";
-          }
-        ];
-      };
       # Magit-like git UI: status, commit/rebase/merge popups, worktree popup.
       # Routes diffs through diffview.nvim (already enabled above) for proper
-      # side-by-side review of Claude's edits.
+      # side-by-side review.
       neogit = {
         package = pkgs-unstable.vimPlugins.neogit;
         setupModule = "neogit";
@@ -1154,7 +1016,6 @@
     binds.whichKey = {
       enable = true;
       register = {
-        "<leader>a" = "+AI/Claude Code";
         "<leader>b" = "+Buffers";
         "<leader>g" = "+Git";
         "<leader>s" = "+Sessions";
@@ -1356,73 +1217,6 @@
           end
         '';
       }
-      {
-        enable = true;
-        desc = "Claude Code: buffer-local <leader>as to add file from tree views";
-        event = [ "FileType" ];
-        pattern = [
-          "neo-tree"
-          "oil"
-          "netrw"
-        ];
-        callback = lib.generators.mkLuaInline ''
-          function()
-            vim.keymap.set("n", "<leader>as", "<cmd>ClaudeCodeTreeAdd<cr>", {
-              buffer = true,
-              desc = "Add file to Claude",
-            })
-          end
-        '';
-      }
-      # Snacks' terminal binds <Esc> (expr, mode=t) such that the first Esc
-      # within 200ms is *forwarded to the terminal* (Claude sees it and
-      # triggers chat:cancel) and only a second Esc calls stopinsert. Override
-      # buffer-locally to exit terminal mode immediately on a single Esc.
-      # FileType snacks_terminal (set at snacks/terminal.lua:34) narrows the
-      # autocmd to snacks-managed terminals; the `snacks_terminal` buf-var
-      # filter (set at snacks/terminal.lua:111) confirms it's specifically the
-      # Claude one. vim.schedule defers past snacks.win's own self:map() call
-      # (snacks/win.lua:898) so our buffer-local keymap wins.
-      {
-        enable = true;
-        desc = "Claude Code: single-Esc exits terminal mode (override snacks double-esc)";
-        event = [ "FileType" ];
-        pattern = [ "snacks_terminal" ];
-        callback = lib.generators.mkLuaInline ''
-          function(args)
-            local bufnr = args.buf
-            vim.schedule(function()
-              local st = vim.b[bufnr].snacks_terminal
-              if type(st) == "table" and st.cmd and tostring(st.cmd):match("claude") then
-                vim.keymap.set("t", "<Esc>", function()
-                  vim.api.nvim_feedkeys(
-                    vim.api.nvim_replace_termcodes("<C-\\><C-n>", true, false, true),
-                    "n",
-                    false
-                  )
-                end, {
-                  buffer = bufnr,
-                  desc = "Exit terminal mode (override snacks)",
-                })
-                -- Single Esc exits terminal mode (above) before Claude can
-                -- see it, so chat:cancel never fires. <C-g> writes a raw
-                -- Esc byte (\27) directly to the pty via chansend, bypassing
-                -- nvim's keymap layer entirely — the Esc keymap above can't
-                -- swallow it, and the key stays in terminal mode. Claude's
-                -- readline treats it as cancel-current-turn. <C-c> is avoided
-                -- because it SIGINTs the CLI, wiping the in-progress prompt.
-                vim.keymap.set("t", "<C-g>", function()
-                  local chan = vim.b[bufnr].terminal_job_id
-                  if chan then vim.api.nvim_chan_send(chan, "\27") end
-                end, {
-                  buffer = bufnr,
-                  desc = "Cancel Claude request",
-                })
-              end
-            end)
-          end
-        '';
-      }
     ];
 
     languages.rust = {
@@ -1490,27 +1284,5 @@
       end
     '';
 
-    # Global helper used by <leader>aa / <leader>ad (see keys above) to
-    # force Claude's TUI to repaint after a diff tab closes. See comment
-    # block above those keys for the full rationale.
-    luaConfigRC.claude-repaint = ''
-      function _G.ClaudeRepaint()
-        for _, win in ipairs(vim.api.nvim_list_wins()) do
-          local buf = vim.api.nvim_win_get_buf(win)
-          local st = vim.b[buf].snacks_terminal
-          if type(st) == "table" and st.cmd and tostring(st.cmd):match("claude") then
-            local chan = vim.b[buf].terminal_job_id
-            local w, h = vim.api.nvim_win_get_width(win), vim.api.nvim_win_get_height(win)
-            if chan then
-              vim.fn.jobresize(chan, w - 1, h)
-              vim.fn.jobresize(chan, w, h)
-            end
-            vim.api.nvim_set_current_win(win)
-            vim.cmd("startinsert")
-            return
-          end
-        end
-      end
-    '';
   };
 }

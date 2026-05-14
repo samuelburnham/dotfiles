@@ -29,6 +29,7 @@
   home.packages = with pkgs; [
     ripgrep
     htop
+    jq
     # Pinned to nixpkgs master for fast-moving updates; bump via:
     #   nix flake update nixpkgs-master
     pkgs-master.claude-code
@@ -93,8 +94,10 @@
   # from an older home-manager generation. `package = null` skips the
   # module's own claude-code install since we already pull
   # pkgs-master.claude-code into home.packages above for newer releases.
-  # Paths under ${config.home.homeDirectory} so the whitelist stays valid
-  # on any host regardless of username.
+  # Only the CLAUDE.md memory lives here — settings.json (permissions,
+  # hooks, theme, sandbox mode) is rendered by apps/claude.nix on each
+  # `nix run apps#claude`, so allow-list tweaks apply on the next launch
+  # without a nixos-rebuild.
   programs.claude-code = {
     enable = true;
     package = null;
@@ -145,38 +148,6 @@
       code *inside* diffs (the commit body itself is the right place for
       process narrative; the code is not).
     '';
-    settings = {
-      theme = "dark";
-      sandbox = {
-        enabled = true;
-        autoAllowBashIfSandboxed = false;
-      };
-      permissions = {
-        disableBypassPermissionsMode = "disable";
-        # Global read-only whitelist for ~/repos/clones: third-party
-        # source trees used for research/context gathering. Covers Read,
-        # Glob, and Grep — no write permissions granted.
-        #
-        # Build/test commands (cargo, lake) are allowed without prompting
-        # — they're sandbox-safe, idempotent, and the prompt-loop for
-        # "yes, run cargo check again" is pure friction. `:*` matches any
-        # argument suffix.
-        allow = [
-          "Read(${config.home.homeDirectory}/repos/clones/**)"
-          "Glob(${config.home.homeDirectory}/repos/clones/**)"
-          "Grep(${config.home.homeDirectory}/repos/clones/**)"
-          "Bash(cargo build:*)"
-          "Bash(cargo check:*)"
-          "Bash(cargo test:*)"
-          "Bash(cargo fmt:*)"
-          "Bash(cargo clippy:*)"
-          "Bash(cargo xclippy:*)"
-          "Bash(lake build:*)"
-          "Bash(lake exe:*)"
-          "Bash(lake test:*)"
-        ];
-      };
-    };
   };
 
   # tmux-which-key: replace the plugin's default menu with our own groups
@@ -329,6 +300,11 @@
     # of erroring on "no current client".
     [ -n "$TMUX" ] && tmux switch-client -t "=$S"
     """
+    # Guarded on .envrc presence so worktrees in non-direnv repos don't
+    # error. `direnv allow` accepts a path and resolves the .envrc itself.
+    direnv = """
+    [ -f "{{ worktree_path }}/.envrc" ] && direnv allow "{{ worktree_path }}" || true
+    """
 
     [pre-remove]
     tmux = """
@@ -375,6 +351,8 @@
     bashrcExtra = ''
       LS_COLORS=$(echo "$LS_COLORS" | sed 's/=00;90/=36;2/g')
       export PATH="$HOME/.cargo/bin:$PATH"
+      # Read-only gh PAT, sops-decrypted at boot.
+      [ -r /run/secrets/gh-token ] && export GH_TOKEN="$(cat /run/secrets/gh-token)"
       # Ignore C-d at an empty prompt so a misclick doesn't exit bash (and
       # close Ghostty). C-Shift-w is the intentional close shortcut.
       set -o ignoreeof
@@ -462,6 +440,10 @@
     ];
     extraConfig = ''
       set -ga terminal-overrides ",*256col*:Tc"
+      # Ghostty's terminfo is `xterm-ghostty`, which doesn't match the
+      # `*256col*` pattern above — without this, truecolor passes from
+      # Ghostty *to* tmux but not *through* tmux to inner TUIs.
+      set -as terminal-features ",xterm-ghostty:RGB"
       set -g renumber-windows on
       # Windows and panes start at 1 instead of 0 — matches the number-row
       # keys (`prefix 1`, `prefix 2`, ...) used to jump between them, so
@@ -475,23 +457,24 @@
       # inside tmux.
       set -g allow-passthrough on
 
-      # Mouse is on for wheel scrollback and click-select-pane, but we
-      # disable every event that would auto-enter copy-mode and clobber
-      # the clipboard. For text selection, hold Shift while dragging to
-      # bypass tmux's mouse capture and get terminal-native
-      # (solarized-colored, system-clipboard) selection.
-      unbind -T root MouseDrag1Pane
-      unbind -T root DoubleClick1Pane
-      unbind -T root TripleClick1Pane
-
       # `keyMode = "vi"` above covers copy-mode navigation (h/j/k/l/w/b/e,
       # /, ?, n/N, etc.). tmux's vi mode doesn't bind `v` or `y` though, so
       # add them: v begins selection, y yanks via wl-copy so the result
       # lands in the Wayland clipboard (copy-pipe-and-cancel also keeps it
       # in tmux's paste buffer and exits copy-mode). Enter copy-mode with
-      # `prefix + [`, paste with `prefix + ]`.
+      # `prefix + [`, paste with `prefix + ]`. MouseDragEnd1Pane routes
+      # mouse drag-release through the same pipe so plain drag-select
+      # respects pane boundaries and lands in the system clipboard;
+      # Shift-drag still bypasses tmux entirely for terminal-native
+      # selection across panes.
       bind -T copy-mode-vi v send-keys -X begin-selection
       bind -T copy-mode-vi y send-keys -X copy-pipe-and-cancel 'wl-copy'
+      bind -T copy-mode-vi MouseDragEnd1Pane send-keys -X copy-pipe-and-cancel 'wl-copy'
+
+      # Jump between shell prompts in copy-mode, anchored on OSC 133
+      # semantic-prompt markers emitted by Ghostty's shell integration.
+      bind -T copy-mode-vi [ send-keys -X previous-prompt
+      bind -T copy-mode-vi ] send-keys -X next-prompt
 
       # Every custom binding's -N note is prefixed with "» " so it's
       # easy to spot our own entries in the (now all-bindings) viewer

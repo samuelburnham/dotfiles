@@ -51,19 +51,31 @@
         "browser.aboutConfig.showWarning" = false;
         # Always open bookmarks in new tab
         "browser.tabs.loadBookmarksInTabs" = true;
-        # Disable save passwords and autofill
+        # Disable save passwords, autofill, and the breach-alert popup
+        # that Firefox throws at form fields whenever it thinks one of the
+        # site's fields matches a leaked-credential database.
         "signon.rememberSignons" = false;
+        "signon.autofillForms" = false;
         "extensions.formautofill.addresses.enabled" = false;
         "extensions.formautofill.creditCards.enabled" = false;
+        # Form history dropdown (the "annoying" autocomplete that surfaces
+        # everything you've ever typed into a search/login field).
+        "browser.formfill.enable" = false;
 
         # Don't ask for download dir
         "browser.download.useDownloadDir" = false; # Doesn't seem to stick after login
 
-        # Disable crappy home activity stream page
+        # Disable crappy home activity stream page, including the
+        # sponsored Pocket "stories" row and the sponsored top-site tiles.
         "browser.newtabpage.activity-stream.feeds.section.topstories" = false;
         "browser.newtabpage.activity-stream.feeds.topsites" = false;
+        "browser.newtabpage.activity-stream.showSponsored" = false;
         "browser.newtabpage.activity-stream.showSponsoredTopSites" = false;
+        "browser.newtabpage.activity-stream.section.highlights.includePocket" = false;
         "browser.newtabpage.activity-stream.improvesearch.topSiteSearchShortcuts" = false;
+        # Pocket integration entirely — removes the save-to-Pocket button
+        # and the sponsored-content sources Pocket feeds into the new tab.
+        "extensions.pocket.enabled" = false;
         "browser.newtabpage.blocked" = lib.genAttrs [
           # Youtube
           "26UbzFJ7qT9/4DhodHKA1Q=="
@@ -79,7 +91,24 @@
           "T9nJot5PurhJSy8n038xGA=="
         ] (_: 1);
 
+        # URL bar — kill Firefox Suggest entirely (sponsored + non-sponsored)
+        # plus the side panels (trending, weather, addons, MDN, Pocket, Yelp)
+        # that Mozilla keeps adding behind feature flags.
+        "browser.urlbar.quicksuggest.enabled" = false;
+        "browser.urlbar.quicksuggest.dataCollection.enabled" = false;
         "browser.urlbar.suggest.quicksuggest.sponsored" = false;
+        "browser.urlbar.suggest.quicksuggest.nonsponsored" = false;
+        "browser.urlbar.suggest.trending" = false;
+        "browser.urlbar.suggest.weather" = false;
+        "browser.urlbar.suggest.bestmatch" = false;
+        "browser.urlbar.suggest.addons" = false;
+        "browser.urlbar.suggest.mdn" = false;
+        "browser.urlbar.suggest.pocket" = false;
+        "browser.urlbar.suggest.yelp" = false;
+        # Hide the "Firefox Suggest" / "Sponsored" group labels in the
+        # dropdown so any stray result that slips through is unlabeled
+        # rather than carrying ad-style chrome.
+        "browser.urlbar.groupLabels.enabled" = false;
 
         # Harden
         # These don't seem to stick after login
