@@ -54,9 +54,10 @@
   # Not set explicitly but Wayland is enabled and the default
   services.xserver.enable = true;
 
-  # Enable the GNOME Desktop Environment.
+  # GDM works as the display manager for both GNOME and Hyprland sessions;
+  # which desktop is offered is decided by which of ./gnome-desktop.nix or
+  # ./hyprland-desktop.nix the host imports.
   services.displayManager.gdm.enable = true;
-  services.desktopManager.gnome.enable = true;
 
   # Configure keymap in X11
   services.xserver.xkb = {

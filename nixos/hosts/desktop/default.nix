@@ -10,6 +10,12 @@
 {
   imports = [
     ../../common/system.nix
+    # Desktop primarily runs Hyprland; the matching home-manager overlay
+    # (home/sam/hyprland.nix) is wired via home/sam/desktop.nix in
+    # nixos/flake.nix. GNOME stays installed alongside as a fallback —
+    # both desktop entries appear in GDM, pick whichever at login.
+    ../../common/hyprland-desktop.nix
+    ../../common/gnome-desktop.nix
     ./hardware-configuration.nix
   ];
 

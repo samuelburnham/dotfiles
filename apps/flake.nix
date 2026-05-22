@@ -377,12 +377,20 @@
                     }
                     // pkgs.lib.optionalAttrs enableDbus {
                       dbus.policies = {
-                        # Settings portal for auto-dark-mode.nvim's color-scheme query
-                        "org.freedesktop.portal.Settings" = "talk";
+                        # auto-dark-mode.nvim queries color-scheme via
+                        # org.freedesktop.portal.Settings.Read, but the D-Bus
+                        # destination is org.freedesktop.portal.Desktop (the
+                        # portal host process), not the interface name.
+                        "org.freedesktop.portal.Desktop" = "talk";
                         "org.freedesktop.Notifications" = "talk";
                       };
                     };
                 };
+
+              # Max ro-bind slots for sibling ~/repos entries (see the
+              # fill-slots snippet in the boxvim wrapper below). Bumped if
+              # the warning ever fires.
+              boxvimRoSlots = 64;
 
               boxvimSandbox = mkSandbox {
                 name = "boxvim";
@@ -404,10 +412,23 @@
                   # next nvim startup.
                   (sloth.concat' sloth.homeDir "/.local/share/nvf/sessions")
                 ];
-                extraBindRo = sloth: [
-                  # nvim plugin config tree
-                  (sloth.concat' sloth.homeDir "/.config/nvf")
-                ];
+                extraBindRo =
+                  sloth:
+                  [
+                    # nvim plugin config tree
+                    (sloth.concat' sloth.homeDir "/.config/nvf")
+                  ]
+                  # ro bind slots for sibling repos under ~/repos. Each pair
+                  # is filled at wrapper-run time with one top-level
+                  # ~/repos/* entry that isn't an ancestor of $PROJECT_DIR
+                  # or $MAIN_REPO_DIR (binding an ancestor ro would shadow
+                  # the rw mount, since nixpak emits bind.rw before
+                  # bind.ro). Unused slots stay /dev/null → /dev/null
+                  # (no-op, same pattern as $DOTFILES_RO_SRC/DST).
+                  ++ builtins.genList (i: [
+                    (sloth.env "REPO_RO_SRC_${toString i}")
+                    (sloth.env "REPO_RO_DST_${toString i}")
+                  ]) boxvimRoSlots;
                 # BOXVIM=1 gates session autoload/autostart in nvim.nix so quick
                 # host-nvim invocations don't clobber boxvim's saved state.
                 extraEnv = {
@@ -471,6 +492,33 @@
 
               nvim = pkgs.writeShellScriptBin "nvim" ''
                 ${sandboxEnvSetup}
+
+                # Fill ro-bind slots with top-level ~/repos entries so boxvim
+                # can read sibling repos (clones, forks, other projects).
+                # Skips any entry that's an ancestor of PROJECT_DIR or
+                # MAIN_REPO_DIR — binding an ancestor ro would land after
+                # the rw bind in bwrap argv and shadow it. Unused slots get
+                # /dev/null → /dev/null (no-op).
+                i=0
+                for entry in "$HOME"/repos/*; do
+                  [ -d "$entry" ] || continue
+                  case "$PROJECT_DIR/" in "$entry"/*) continue ;; esac
+                  case "$MAIN_REPO_DIR/" in "$entry"/*) continue ;; esac
+                  if [ "$i" -ge ${toString boxvimRoSlots} ]; then
+                    echo "boxvim: more than ${toString boxvimRoSlots} sibling repos under ~/repos; skipping the rest." >&2
+                    break
+                  fi
+                  printf -v "REPO_RO_SRC_$i" '%s' "$entry"
+                  printf -v "REPO_RO_DST_$i" '%s' "$entry"
+                  export "REPO_RO_SRC_$i" "REPO_RO_DST_$i"
+                  i=$((i + 1))
+                done
+                while [ "$i" -lt ${toString boxvimRoSlots} ]; do
+                  printf -v "REPO_RO_SRC_$i" '%s' "/dev/null"
+                  printf -v "REPO_RO_DST_$i" '%s' "/dev/null"
+                  export "REPO_RO_SRC_$i" "REPO_RO_DST_$i"
+                  i=$((i + 1))
+                done
 
                 # Pin nvim's RPC socket to a unique-per-launch path so the
                 # auto-server never relies on the sandbox PID. bwrap's

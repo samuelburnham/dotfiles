@@ -8,6 +8,10 @@
 {
   imports = [
     ../../common/system.nix
+    # Laptop stays on GNOME (the desktop host migrated to Hyprland). The
+    # GNOME system-level options moved out of common/system.nix so each
+    # host opts in to its own graphical environment.
+    ../../common/gnome-desktop.nix
     ./hardware-configuration.nix
   ];
 

@@ -47,97 +47,18 @@
     options.guicursor = "n-v-c-sm:block,i-ci-ve:ver25,r-cr-o:hor20,t:ver25-blinkon500-blinkoff500-TermCursor";
     vimAlias = true;
 
-    # Solarized theme, follows OS light/dark preference via auto-dark-mode.nvim
+    # Catppuccin theme, follows OS light/dark preference via auto-dark-mode.nvim
     theme = {
       enable = true;
-      name = "solarized";
-      style = "solarized";
-      # Diff* overrides: give added/removed lines a visible bg instead of
-      # solarized.nvim's fg-only tint, and force Neogit's adds to green in
-      # dark mode (solarized.nvim ships them as blue). Registered in
-      # extraConfig so it's in place before `:colorscheme solarized` fires.
-      extraConfig = ''
-        vim.api.nvim_create_autocmd("ColorScheme", {
-          pattern = "solarized",
-          callback = function()
-            local palette = (vim.o.background == "light")
-              and require("solarized.palette.solarized-light")
-              or require("solarized.palette")
-            local c = palette[require("solarized").config.palette or "solarized"]
-            -- solarized's light mix_red/mix_green are nearly cream-on-cream;
-            -- substitute saturated pink/leaf-green there.
-            local is_light = vim.o.background == "light"
-            local red_bg   = is_light and "#f5c4c4" or c.mix_red
-            local green_bg = is_light and "#bfd9bc" or c.mix_green
-            -- DiffChange marks lines that have intra-line edits; DiffText
-            -- marks the exact changed span inside them. With the empty
-            -- DiffChange + bold-only DiffText we had before, single-word
-            -- edits showed no color at all (bold alone on black reads as
-            -- plain text). Give DiffChange a muted neutral bg and DiffText
-            -- a stronger tint so the changed chars pop against the line.
-            -- Orange/yellow for "changed" is the diff-UI convention and
-            -- avoids confusion with DiffAdd (green) / DiffDelete (red).
-            -- diffview.nvim applies the same DiffText to both sides of the
-            -- split, so a side-neutral accent is the only correct choice.
-            --
-            -- Dark-mode fg override: without an explicit fg, DiffText
-            -- inherits the underlying token's color — faded Comment gray
-            -- (base01 #586e75) on our warm-brown bg is barely legible.
-            -- Forcing fg = base3 (cream) ensures the changed chars pop
-            -- regardless of syntax class. Syntax colors are suppressed on
-            -- the changed span (one-line-diff tradeoff), but that's the
-            -- right call here: the point of DiffText is to scream "this
-            -- is what changed", not to preserve token coloring. Light
-            -- mode keeps the default fg — pale-yellow bg has enough
-            -- contrast with any solarized-light token color.
-            local change_bg = is_light and "#f5ebcc" or "#3C342C"
-            local text_bg   = is_light and "#e8cf79" or "#6b4a1f"
-            local text_fg   = is_light and nil or c.base3
-            local set = vim.api.nvim_set_hl
-            set(0, "DiffAdd",    { bg = green_bg })
-            set(0, "DiffDelete", { bg = red_bg, fg = c.red })
-            set(0, "DiffChange", { bg = change_bg })
-            set(0, "DiffText",   { bg = text_bg, fg = text_fg, bold = true })
-            pcall(function() require("diffview.hl").setup() end)
-            set(0, "NeogitDiffAdd",             { fg = c.green })
-            set(0, "NeogitDiffAddHighlight",    { fg = c.green, bg = green_bg })
-            set(0, "NeogitDiffAddInline",       { bg = green_bg, bold = true })
-            set(0, "NeogitDiffDelete",          { fg = c.red })
-            set(0, "NeogitDiffDeleteHighlight", { fg = c.red, bg = red_bg })
-            set(0, "NeogitDiffDeleteInline",    { bg = red_bg, bold = true })
-            -- solarized.nvim's dark palette maps git_add to blue (#268BD2),
-            -- which collides with the usual green=add / red=delete /
-            -- yellow=change convention and with our diffview palette above.
-            -- Canonical solarized green (#859900) is olive and barely
-            -- distinguishable from yellow (#B58900) as a sign-column fg in
-            -- either mode. Substitute selenized's greens — a darker
-            -- #489100 in light mode and a brighter #75b938 in dark mode —
-            -- so add vs change reads at a glance.
-            local sign_add = is_light and "#489100" or "#75b938"
-            set(0, "GitSignsAdd",    { fg = sign_add })
-            set(0, "GitSignsChange", { fg = c.yellow })
-            set(0, "GitSignsDelete", { fg = c.red })
-          end,
-        })
-      '';
+      name = "catppuccin";
+      style = "mocha";
     };
     # Modeline
     statusline.lualine = {
       enable = true;
-      theme = "auto";
-      # solarized.nvim's lualine theme doesn't define `terminal`, so it falls
-      # back to normal (blue). Wrap the resolved theme and set terminal to cyan.
-      setupOpts.options.theme = lib.mkForce (
-        lib.generators.mkLuaInline ''
-          (function()
-            local name = vim.g.colors_name or 'auto'
-            local ok, theme = pcall(require, 'lualine.themes.' .. name)
-            if not ok then theme = require('lualine.themes.auto') end
-            theme.terminal = { a = { fg = '#002b36', bg = '#2aa198', gui = 'bold' } }
-            return theme
-          end)()
-        ''
-      );
+      # catppuccin.nvim registers the theme as catppuccin-nvim, not catppuccin;
+      # use setupOpts to bypass nvf's enum (which only lists "catppuccin").
+      setupOpts.options.theme = "catppuccin-nvim";
     };
     visuals.rainbow-delimiters.enable = true;
     # TODO: Test this out e.g. with gitsigns and consider nvim-hlslens for search
@@ -366,25 +287,19 @@
           };
         };
         setup = ''
-          -- solarized.nvim's lualine theme doesn't define `terminal` (falls
-          -- back to normal/blue). Override the entry to cyan.
-          local function with_terminal(theme_name)
-            local theme = require('lualine.themes.' .. theme_name)
-            theme.terminal = { a = { fg = '#002b36', bg = '#2aa198', gui = 'bold' } }
-            return theme
-          end
-          -- auto-dark-mode only sets vim.opt.background; re-run `:colorscheme`
-          -- so solarized.nvim re-applies its palette-dependent highlights
-          -- (ColorScheme also fires, so our Diff* overrides re-apply too).
-          local function apply(bg)
-            vim.api.nvim_set_option_value('background', bg, {})
-            vim.cmd.colorscheme('solarized')
-            require('lualine').setup({ options = { theme = with_terminal('solarized') } })
+          local function apply(flavour)
+            require('catppuccin').setup({ flavour = flavour })
+            vim.cmd.colorscheme('catppuccin')
           end
           require('auto-dark-mode').setup({
-            set_dark_mode = function() apply('dark') end,
-            set_light_mode = function() apply('light') end,
+            set_dark_mode  = function() apply('mocha') end,
+            set_light_mode = function() apply('latte') end,
           })
+          -- User commands let darkman's mode scripts trigger an instant switch
+          -- via `nvim --server <sock> --remote-send '<Cmd>DarkMode<CR>'`
+          -- without waiting for auto-dark-mode's 3-second poll interval.
+          vim.api.nvim_create_user_command('DarkMode',  function() apply('mocha') end, {})
+          vim.api.nvim_create_user_command('LightMode', function() apply('latte') end, {})
         '';
       };
       # Enables loading rust-analyzer after direnv completes for Rust files in another directory

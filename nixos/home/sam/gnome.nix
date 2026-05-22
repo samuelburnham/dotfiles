@@ -1,59 +1,23 @@
 # GNOME workstation overlay — imported by NixOS hosts that run a full
-# GNOME desktop (see hosts/desktop, hosts/laptop). Bundles the GNOME
-# dconf/extensions config, GUI applications, Firefox profile, Ghostty
-# terminal, GNOME-app MIME defaults, the local-path sandboxed nvim
-# wrapper (hot-reload against ~/repos/dotfiles/apps), and rootless
-# Podman. Ubuntu-style remote hosts don't import this.
+# GNOME desktop (see hosts/laptop and hosts/desktop's GNOME fallback).
+# Holds only GNOME-specific bits (extensions, dconf, pop-launcher); the
+# shared GUI applications, Ghostty, MIME defaults, and Podman live in
+# ./gui.nix.
 {
   pkgs,
-  pkgs-unstable,
-  config,
   ...
 }:
 {
   imports = [
-    ./firefox.nix
+    ./gui.nix
   ];
 
   home.packages =
-    with pkgs;
-    [
-      bitwarden-desktop
-      vscode
-      zulip
-      spotify
-      obsidian
-      telegram-desktop
-      discord
-      slack
-      google-chrome
-      todoist-electron
-      libreoffice
-      wl-clipboard
-      lm_sensors
-      smartmontools
-      # TODO: Freon Gnome extension is broken when `nvme-cli` is enabled
-      # https://github.com/UshakovVasilii/gnome-shell-extension-freon/issues/293
-      pkgs-unstable.nvme-cli # Currently v2.15
-      restic
-      nerd-fonts.fira-code
-      nerd-fonts.jetbrains-mono
-      # Image file utilities
-      imagemagick
-      ghostscript
-      inkscape
+    (with pkgs; [
       # Search backend for the pop-shell launcher (Super+/); the extension
       # alone is just the UI and returns nothing without this daemon.
       pop-launcher
-      # `nvim` = the sandboxed editor from the standalone apps flake.
-      # Each invocation resolves the current ~/repos/dotfiles/apps flake state,
-      # so changes to plugins/config take effect without any profile upgrade.
-      # System editor ($EDITOR) stays as plain `vim` for git commit messages etc.
-      # Uses the local repo path; ubuntu host points at the github copy instead.
-      (pkgs.writeShellScriptBin "nvim" ''
-        exec ${pkgs.nix}/bin/nix run ${config.home.homeDirectory}/repos/dotfiles/apps#nvim -- "$@"
-      '')
-    ]
+    ])
     ++ (with pkgs.gnomeExtensions; [
       pop-shell
       caffeine
@@ -64,51 +28,6 @@
       # Start apps in a specific workspace
       auto-move-windows
     ]);
-
-  # Shell alias rather than a writeShellScriptBin wrapper because
-  # `pkgs-master.claude-code` (base.nix) already provides ~/.nix-profile/bin/claude
-  # and home-manager errors on a duplicate `claude` from a wrapper. The alias
-  # only fires in interactive shells, so scripts (e.g. wt's commit-message
-  # generator in base.nix) and other subprocesses still get the bare host
-  # binary — matches the threat model: sandbox the *interactive* sessions you
-  # launch yourself, leave one-shot tooling alone.
-  programs.bash.shellAliases.claude =
-    "nix run ${config.home.homeDirectory}/repos/dotfiles/apps#claude --";
-
-  # Get file with searchable terminal output using Ctrl+Shift+J
-  programs.ghostty = {
-    enable = true;
-    settings = {
-      theme = "dark:iTerm2 Solarized Dark,light:iTerm2 Solarized Light";
-      shell-integration-features = "no-cursor";
-      cursor-style = "bar";
-      # New shells start in ~/repos rather than $HOME. Matters because
-      # boxvim/boxclaude refuse to launch from $HOME (would shadow the
-      # per-subdir bind overlays with a wholesale home mount).
-      working-directory = "${config.home.homeDirectory}/repos";
-      # CSI u sequence (\e[13;2u = Shift+Enter under fixterms/kitty
-      # keyboard protocol) survives tmux's `extended-keys on` passthrough,
-      # which a raw `\n` byte does not — tmux silently drops the raw form.
-      keybind = "shift+enter=text:\\x1b[13;2u";
-    };
-  };
-
-  # Default apps
-  # Firefox for web browser
-  # Loupe for image viewer
-  # Nautilus for file browser
-  xdg.mimeApps = {
-    enable = true;
-    defaultApplications = {
-      "image/png" = [ "org.gnome.Loupe.desktop" ];
-      "image/jpg" = [ "org.gnome.Loupe.desktop" ];
-      "image/gif" = [ "org.gnome.Loupe.desktop" ];
-    };
-  };
-
-  services.podman = {
-    enable = true;
-  };
 
   # These settings can be found in `dconf-editor` or by running `dconf watch /` and then
   # editing GUI settings, which will print values in the terminal.

@@ -24,6 +24,14 @@
       url = "github:max-sixty/worktrunk";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    # nixpkgs-unstable lags the hyprshell release cycle; fzf-style matching
+    # for desktop-file exec fields landed in 4.10.1 and isn't in unstable yet.
+    # Track upstream directly; `nix flake update hyprshell` pulls the latest.
+    hyprshell = {
+      url = "github:H3rmt/hyprshell";
+      inputs.nixpkgs.follows = "nixpkgs-unstable";
+    };
+
   };
 
   outputs =

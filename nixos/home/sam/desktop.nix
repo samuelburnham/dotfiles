@@ -9,48 +9,20 @@
   imports = [
     ./base.nix
     ./alias.nix
+    # Hyprland is the primary session; GNOME is imported alongside as a
+    # fallback so logging into the GNOME entry in GDM gives the full
+    # pop-shell setup (keybinds, favourites, dconf) rather than a stripped
+    # session. The two overlays set several of the same options
+    # (programs.ghostty, services.podman, xdg.mimeApps) to identical
+    # values, which Nix merges cleanly; home.packages overlaps duplicate
+    # harmlessly in the list. Drop ./gnome.nix once Hyprland is settled
+    # to halve the build closure.
+    ./hyprland.nix
     ./gnome.nix
   ];
 
   home.username = username;
   home.homeDirectory = "/home/${username}";
-
-  services.podman = {
-    enable = true;
-    #builds = {
-    #  claudeman = {
-    #    # TODO: Set `SetWorkingDirectory` so I can use relative path here
-    #    file = "/home/sam/dotfiles/nixos/Dockerfile.claudeman";
-    #    autoStart = false;
-    #    tags = ["latest"];
-    #  };
-    #};
-    #containers = {
-    #  claudeman = {
-    #    image = "localhost/claudeman:latest";
-    #    autoStart = false; # Don't start on boot. What about autostart on login?
-    #    # Enable Docker compatibility
-    #    dockerCompat.enable = true;
-    #    #environment = {
-    #    #  TERM = "xterm-256color";
-    #    #  EDITOR = "vim";
-    #    #};
-    #    volumes = [
-    #      #"${self.home.homeDirectory}/repos/tests/templean:/workspace:rw"
-    #      "/home/sam/repos/tests/templean:/home/ubuntu:rw"
-    #    ];
-
-    #    # Add network access, SSH forwarding, etc
-    #    extraPodmanArgs = [
-    #      "--userns=keep-id"
-    #      "--user ubuntu"
-    #      "--workdir /home/ubuntu"
-    #      #"--privileged"
-    #      #"--network=host"
-    #    ];
-    #  };
-    #};
-  };
 
   # sops = {
   #   # It's also possible to use a ssh key, but only when it has no password:
@@ -76,7 +48,8 @@
   #   #};
   # };
 
-  # GNOME: Set enabled-extensions for desktop (shared extensions only)
+  # GNOME: Set enabled-extensions for desktop (shared extensions only).
+  # Inert under Hyprland — dconf state without gnome-shell to consume it.
   dconf.settings = {
     "org/gnome/shell" = {
       enabled-extensions = with pkgs.gnomeExtensions; [

@@ -11,6 +11,42 @@
     enable = true;
     policies = {
       DisplayBookmarksToolbar = "always";
+      # Pre-answer Firefox's external-protocol confirmation dialog
+      # ("Allow https://… to open the X link with Y?"). `ask = false`
+      # skips the prompt; the scheme list comes from each app's
+      # MimeType= entry in its .desktop file.
+      Handlers.schemes = {
+        tg = {
+          action = "useHelperApp";
+          ask = false;
+          handlers = [
+            {
+              name = "Telegram";
+              path = "${pkgs.telegram-desktop}/bin/telegram-desktop";
+            }
+          ];
+        };
+        tonsite = {
+          action = "useHelperApp";
+          ask = false;
+          handlers = [
+            {
+              name = "Telegram";
+              path = "${pkgs.telegram-desktop}/bin/telegram-desktop";
+            }
+          ];
+        };
+        slack = {
+          action = "useHelperApp";
+          ask = false;
+          handlers = [
+            {
+              name = "Slack";
+              path = "${pkgs.slack}/bin/slack";
+            }
+          ];
+        };
+      };
     };
 
     profiles.sam = {
