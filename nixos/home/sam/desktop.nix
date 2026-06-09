@@ -24,6 +24,42 @@
   home.username = username;
   home.homeDirectory = "/home/${username}";
 
+  # ssh dev-vm → ssh-over-VSOCK into the dev microvm as sam. systemd ships
+  # an ssh_config snippet that ProxyCommands `vsock-mux/*` hosts through
+  # systemd-ssh-proxy, but it only matches when that literal pattern is the
+  # host argument — an alias with HostName set doesn't trigger it, so the
+  # ProxyCommand is replicated here against the same helper.
+  programs.ssh = {
+    enable = true;
+    # HM's implicit `Host *` defaults are deprecated. They only restated
+    # ssh's own built-in defaults, so opt out and keep ssh's defaults
+    # rather than re-declaring an empty block.
+    enableDefaultConfig = false;
+    matchBlocks.dev-vm = {
+      hostname = "vsock-mux/var/lib/microvms/dev/notify.vsock";
+      user = "sam";
+      proxyCommand = "${pkgs.systemd}/lib/systemd/systemd-ssh-proxy %h %p";
+      # Forward the sops-decrypted tokens from the host session into the VM
+      # (sshd there sets AcceptEnv GH_TOKEN NIX_CONFIG). Only present when
+      # the launching shell has them — see the login-shell wrapper on the
+      # Super+T bind / launcher entry.
+      sendEnv = [
+        "GH_TOKEN"
+        "NIX_CONFIG"
+      ];
+      extraOptions = {
+        ProxyUseFdpass = "yes";
+        CheckHostIP = "no";
+        StrictHostKeyChecking = "no";
+        UserKnownHostsFile = "/dev/null";
+        # /dev/null known-hosts means ssh re-"adds" the key every connect
+        # and prints a warning each time; ERROR drops that notice while
+        # still surfacing real failures.
+        LogLevel = "ERROR";
+      };
+    };
+  };
+
   # sops = {
   #   # It's also possible to use a ssh key, but only when it has no password:
   #   #age.sshKeyPaths = [ "/home/user/path-to-ssh-key" ];

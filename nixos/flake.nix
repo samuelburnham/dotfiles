@@ -31,6 +31,15 @@
       url = "github:H3rmt/hyprshell";
       inputs.nixpkgs.follows = "nixpkgs-unstable";
     };
+    microvm = {
+      url = "github:microvm-nix/microvm.nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    # Neovim flake — drives the standalone nvim package + the in-VM editor.
+    nvf = {
+      url = "github:notashelf/nvf";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
 
   };
 
@@ -48,11 +57,30 @@
       systems = [ "x86_64-linux" ];
 
       perSystem =
-        { pkgs, ... }:
+        { system, pkgs, ... }:
+        let
+          pkgs-unstable = import nixpkgs-unstable { inherit system; };
+          # Standalone nvim — same nvf config used inside the dev microvm
+          # and anywhere `nix run github:samuelburnham/dotfiles?dir=nixos#nvim`
+          # is invoked.
+          customNeovim =
+            (inputs.nvf.lib.neovimConfiguration {
+              inherit pkgs;
+              extraSpecialArgs = {
+                inherit inputs pkgs-unstable;
+              };
+              modules = [
+                ./home/sam/nvim.nix
+              ];
+            }).neovim;
+        in
         {
           # `nix fmt` entry point. nixfmt-tree = treefmt pre-configured with
           # nixfmt (RFC 166), respects .gitignore, caches per-file, parallel.
           formatter = pkgs.nixfmt-tree;
+
+          packages.nvim = customNeovim;
+          packages.default = customNeovim;
 
           # Surface the HM activation derivation as a package + runnable app
           # so `nix build .#ubuntu` and `nix run .#ubuntu` work without

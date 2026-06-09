@@ -1,9 +1,9 @@
 # Shared GUI overlay — common bits imported by both DE-specific overlays
 # (./gnome.nix and ./hyprland.nix). Holds the desktop applications,
-# Ghostty terminal, image-MIME defaults, Podman, Firefox profile, and
-# the local-path sandboxed nvim wrapper that behave the same regardless
-# of which compositor is active. DE-specific packages (pop-shell,
-# gnome-control-center, waybar, etc.) stay in their respective overlay.
+# kitty terminal, image-MIME defaults, Podman, Firefox profile, and the
+# nvim package that behave the same regardless of which compositor is
+# active. DE-specific packages (pop-shell, gnome-control-center, waybar,
+# etc.) stay in their respective overlay.
 #
 # When both overlays are imported on the same host (desktop, where GNOME
 # stays around as a fallback), this file is included twice — Nix's
@@ -11,12 +11,17 @@
 {
   pkgs,
   pkgs-unstable,
+  inputs,
   config,
   ...
 }:
 {
   imports = [
     ./firefox.nix
+    # Ghostty as the host-native terminal. vm.nix imports ghostty.nix
+    # directly (not via this file), so the microvm guest keeps its own
+    # copy; path-dedup means the host's two DE overlays share this one.
+    ./ghostty.nix
   ];
 
   home.packages =
@@ -49,51 +54,53 @@
       loupe
     ]
     ++ [
-      # `nvim` = the sandboxed editor from the standalone apps flake.
-      # Each invocation resolves the current ~/repos/dotfiles/apps flake state,
-      # so changes to plugins/config take effect without any profile upgrade.
-      # System editor ($EDITOR) stays as plain `vim` for git commit messages etc.
-      # Uses the local repo path; ubuntu host points at the github copy instead.
-      (pkgs.writeShellScriptBin "nvim" ''
-        exec ${pkgs.nix}/bin/nix run ${config.home.homeDirectory}/repos/dotfiles/apps#nvim -- "$@"
+      # nvim = the standalone nvf-built editor exposed as packages.nvim
+      # at the nixos flake top level. System editor ($EDITOR) stays as
+      # plain `vim` for git commit messages.
+      inputs.self.packages.${pkgs.system}.nvim
+
+      # Connect to the dev microvm, forwarding the sops-decrypted tokens so
+      # `gh api` and private nix flake inputs work inside it. Reads the
+      # secrets explicitly (rather than relying on an interactive shell)
+      # so GUI launches — Hyprland keybind, app-launcher entry — carry them
+      # too; ssh's SendEnv (see desktop.nix) does the forwarding.
+      (pkgs.writeShellScriptBin "ssh-dev-vm" ''
+        [ -r /run/secrets/gh-token ] && export GH_TOKEN="$(cat /run/secrets/gh-token)"
+        [ -r /run/secrets/nix-access-tokens ] && export NIX_CONFIG="$(cat /run/secrets/nix-access-tokens)"
+        exec ${pkgs.openssh}/bin/ssh dev-vm "$@"
       '')
     ];
 
-  # Shell alias rather than a writeShellScriptBin wrapper because
-  # `pkgs-master.claude-code` (base.nix) already provides ~/.nix-profile/bin/claude
-  # and home-manager errors on a duplicate `claude` from a wrapper. The alias
-  # only fires in interactive shells, so scripts (e.g. wt's commit-message
-  # generator in base.nix) and other subprocesses still get the bare host
-  # binary — matches the threat model: sandbox the *interactive* sessions you
-  # launch yourself, leave one-shot tooling alone.
-  programs.bash.shellAliases.claude = "nix run ${config.home.homeDirectory}/repos/dotfiles/apps#claude --";
+  # App-launcher entry: opens host ghostty already ssh'd into the dev
+  # microvm, so launching it drops straight into the VM shell. Plain
+  # ghostty (no args) stays the host-native terminal.
+  xdg.desktopEntries.ghostty-dev = {
+    name = "Ghostty (dev VM)";
+    genericName = "Terminal";
+    comment = "Ghostty connected to the dev microvm over VSOCK";
+    exec = "ghostty -e ssh-dev-vm";
+    icon = "com.mitchellh.ghostty";
+    terminal = false;
+    categories = [
+      "System"
+      "TerminalEmulator"
+    ];
+  };
 
-  # Get file with searchable terminal output using Ctrl+Shift+J
-  programs.ghostty = {
+  # Host kitty — escape hatch for when the dev microvm is unhealthy or
+  # when you need a terminal that isn't tied to the VM at all.
+  programs.kitty = {
     enable = true;
+    font = {
+      name = "FiraCode Nerd Font Mono";
+      size = 11;
+    };
+    themeFile = "Catppuccin-Mocha";
     settings = {
-      # Nerd Font so Waybar/neovim/tmux glyphs (e.g. file-icon plugins,
-      # devicons, powerline) render instead of blank tofu. Package
-      # installed via home.packages above.
-      font-family = "FiraCode Nerd Font Mono";
-      theme = "dark:Catppuccin Mocha,light:Catppuccin Latte";
-      shell-integration-features = "no-cursor";
-      cursor-style = "bar";
-      mouse-hide-while-typing = true;
-      # New shells start in ~/repos rather than $HOME. Matters because
-      # boxvim/boxclaude refuse to launch from $HOME (would shadow the
-      # per-subdir bind overlays with a wholesale home mount).
-      working-directory = "${config.home.homeDirectory}/repos";
-      # CSI u sequence (\e[13;2u = Shift+Enter under fixterms/kitty
-      # keyboard protocol) survives tmux's `extended-keys on` passthrough,
-      # which a raw `\n` byte does not — tmux silently drops the raw form.
-      keybind = "shift+enter=text:\\x1b[13;2u";
-      # Allow terminal apps to read clipboard via OSC 52 without a
-      # per-request dialog. Default is "ask", which silently fails when
-      # the dialog is dismissed before Claude Code's checkImage command
-      # exits. Claude Code also uses wl-paste directly, but some code
-      # paths fall back to OSC 52.
-      clipboard-read = "allow";
+      cursor_shape = "beam";
+      mouse_hide_wait = "1.0";
+      enable_audio_bell = false;
+      hide_window_decorations = "yes";
     };
   };
 

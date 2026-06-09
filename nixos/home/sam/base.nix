@@ -13,6 +13,19 @@
   config,
   ...
 }:
+let
+  rustfmtHook = ''
+    f=$(jq -r '.tool_input.file_path')
+    if [ -z "$f" ] || [ "$f" = "null" ]; then exit 0; fi
+    d=$(dirname "$f")
+    while [ "$d" != / ] && [ ! -f "$d/.envrc" ]; do d=$(dirname "$d"); done
+    if [ -f "$d/.envrc" ]; then
+      direnv exec "$d" rustfmt "$f"
+    else
+      rustfmt "$f"
+    fi
+  '';
+in
 {
   imports = [
     inputs.worktrunk.homeModules.default
@@ -30,9 +43,18 @@
     ripgrep
     htop
     jq
-    # Pinned to nixpkgs master for fast-moving updates; bump via:
-    #   nix flake update nixpkgs-master
-    pkgs-master.claude-code
+    # nixpkgs-master only provides the build recipe (autopatchelf + the
+    # wrapper that wires in ripgrep/bubblewrap/socat); the actual release is
+    # self-pinned here so it tracks upstream independently of channel lag.
+    # Bump: set `version` to https://downloads.claude.ai/claude-code-releases/latest
+    # and paste `.platforms."linux-x64".checksum` from that release's manifest.json.
+    (pkgs-master.claude-code.overrideAttrs (old: rec {
+      version = "2.1.170";
+      src = pkgs.fetchurl {
+        url = "https://downloads.claude.ai/claude-code-releases/${version}/linux-x64/claude";
+        sha256 = "849e007277a0442ab27570d3e3d6d43787507946590e8dd1947e5a39b7081f9e";
+      };
+    }))
     sesh
     fzf
     # Used by the sesh-picker ctrl-f "find" tab below
@@ -90,17 +112,112 @@
     # startup_command = "ssh prod-box"
   '';
 
-  # Claude Code settings — declarative replacement for a stale symlink
-  # from an older home-manager generation. `package = null` skips the
-  # module's own claude-code install since we already pull
-  # pkgs-master.claude-code into home.packages above for newer releases.
-  # Only the CLAUDE.md memory lives here — settings.json (permissions,
-  # hooks, theme, sandbox mode) is rendered by apps/claude.nix on each
-  # `nix run apps#claude`, so allow-list tweaks apply on the next launch
-  # without a nixos-rebuild.
+  # Claude Code config — settings.json + CLAUDE.md. `package = null`
+  # skips the module's own claude-code install since pkgs-master.claude-code
+  # is already in home.packages above. settings.json lives at
+  # ~/.claude/settings.json, which is virtiofs-shared from host into the
+  # dev microvm — host and VM both see the same file.
   programs.claude-code = {
     enable = true;
     package = null;
+    settings = {
+      theme = "dark";
+      sandbox = {
+        enabled = true;
+        autoAllowBashIfSandboxed = true;
+        allowUnsandboxedCommands = true;
+        network.allowedDomains = [
+          "github.com"
+          "api.github.com"
+          "index.crates.io"
+        ];
+      };
+      permissions = {
+        disableBypassPermissionsMode = "disable";
+        # Auto-accept Edit/Write/MultiEdit without prompting. Bash and
+        # other tools still pass through the allow-list and inner sandbox.
+        defaultMode = "acceptEdits";
+        allow = [
+          "Read(${config.home.homeDirectory}/repos/**)"
+          "Glob(${config.home.homeDirectory}/repos/**)"
+          "Grep(${config.home.homeDirectory}/repos/**)"
+          "Edit(${config.home.homeDirectory}/repos/**)"
+          "Read(${config.home.homeDirectory}/.cargo/**)"
+          "Glob(${config.home.homeDirectory}/.cargo/**)"
+          "Grep(${config.home.homeDirectory}/.cargo/**)"
+          "Edit(${config.home.homeDirectory}/.cargo/**)"
+          "Read(/nix/store/**)"
+          "Glob(/nix/store/**)"
+          "Grep(/nix/store/**)"
+          "Bash(cargo build:*)"
+          "Bash(cargo check:*)"
+          "Bash(cargo run:*)"
+          "Bash(cargo test:*)"
+          "Bash(cargo fmt:*)"
+          "Bash(cargo clippy:*)"
+          "Bash(cargo xclippy:*)"
+          "Bash(lake build:*)"
+          "Bash(lake exe:*)"
+          "Bash(lake test:*)"
+          "Bash(nix develop:*)"
+          "Bash(nix build:*)"
+          "Bash(nix fmt:*)"
+          "Bash(nix flake show:*)"
+          "Bash(nix flake metadata:*)"
+          "Bash(nix eval:*)"
+          "Bash(grep:*)"
+          "Bash(rg:*)"
+          "Bash(fd:*)"
+          "Bash(jq:*)"
+          "Bash(tail:*)"
+          "Bash(head:*)"
+          "Bash(wc:*)"
+          "Bash(git status:*)"
+          "Bash(git log:*)"
+          "Bash(git diff:*)"
+          "Bash(git show:*)"
+          "Bash(git branch:*)"
+          "Bash(git remote -v:*)"
+          "Bash(gh api:*)"
+          "Bash(git check-ignore:*)"
+          "Bash(cargo bench:*)"
+          "Bash(ls:*)"
+          "Bash(find:*)"
+          "Bash(xxd:*)"
+          "Bash(awk:*)"
+          "WebFetch(domain:github.com)"
+          "WebFetch(domain:api.github.com)"
+          "WebFetch(domain:index.crates.io)"
+          "Read(/tmp/**)"
+          "Glob(/tmp/**)"
+          "Grep(/tmp/**)"
+        ];
+      };
+      hooks = {
+        PostToolUse = [
+          {
+            matcher = "Edit|Write|MultiEdit";
+            hooks = [
+              {
+                type = "command";
+                "if" = "Edit(**/*.rs)";
+                command = rustfmtHook;
+              }
+              {
+                type = "command";
+                "if" = "Write(**/*.rs)";
+                command = rustfmtHook;
+              }
+              {
+                type = "command";
+                "if" = "MultiEdit(**/*.rs)";
+                command = rustfmtHook;
+              }
+            ];
+          }
+        ];
+      };
+    };
     memory.text = ''
       # Research clones
 
@@ -351,8 +468,19 @@
     bashrcExtra = ''
       LS_COLORS=$(echo "$LS_COLORS" | sed 's/=00;90/=36;2/g')
       export PATH="$HOME/.cargo/bin:$PATH"
-      # Read-only gh PAT, sops-decrypted at boot.
+      # sops-decrypted tokens, exported on hosts that hold the age key.
+      # GH_TOKEN drives `gh api`; NIX_CONFIG carries the access-tokens line
+      # for private flake inputs. The dev microvm has no key of its own and
+      # no secret files — `ssh dev-vm` forwards both from the host session
+      # (see SendEnv/AcceptEnv), so these reads simply no-op inside the VM.
       [ -r /run/secrets/gh-token ] && export GH_TOKEN="$(cat /run/secrets/gh-token)"
+      [ -r /run/secrets/nix-access-tokens ] && export NIX_CONFIG="$(cat /run/secrets/nix-access-tokens)"
+      # AWS + GCP creds for Terraform / aws / gcloud. Same guard: a no-op on
+      # hosts without these secret files (the ubuntu bench box, the microvm).
+      [ -r /run/secrets/aws-access-key-id ] && export AWS_ACCESS_KEY_ID="$(cat /run/secrets/aws-access-key-id)"
+      [ -r /run/secrets/aws-secret-access-key ] && export AWS_SECRET_ACCESS_KEY="$(cat /run/secrets/aws-secret-access-key)"
+      # GCP disabled for now — re-enable with the gcp-credentials secret in system.nix.
+      # [ -r /run/secrets/gcp-credentials ] && export GOOGLE_APPLICATION_CREDENTIALS=/run/secrets/gcp-credentials
       # Ignore C-d at an empty prompt so a misclick doesn't exit bash (and
       # close Ghostty). C-Shift-w is the intentional close shortcut.
       set -o ignoreeof
@@ -616,7 +744,7 @@
       set -agF status-right "#{E:@catppuccin_status_session}"
 
       set -g @continuum-restore 'on'
-      set -g @continuum-save-interval '15'
+      set -g @continuum-save-interval '10'
     '';
   };
 

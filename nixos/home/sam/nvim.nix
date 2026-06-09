@@ -1177,10 +1177,6 @@
     # TODO: Modeline icons and general nerd font support (already installed in home.nix and supported by Ghostty)
     #utility.icon-picker.enable = true;
 
-    luaConfigRC.config-dir = ''
-      require("config")
-    '';
-
     # Route :terminal-launched editor invocations (git commit, fzf, etc.)
     # back through flatten.nvim. system.nix sets a system-wide EDITOR=vim
     # which spawns the real vim binary — flatten is nvim-only, so the
@@ -1196,6 +1192,25 @@
       vim.env.EDITOR = "nvim"
       if vim.v.servername == "" then
         pcall(vim.fn.serverstart)
+      end
+    '';
+
+    # With no local display — e.g. nvim running over ssh in the dev
+    # microvm — wl-copy/xclip have no clipboard to reach, so y/p can't use
+    # the system clipboard. Use OSC 52 instead: nvim emits an escape
+    # sequence that the host terminal (ghostty) turns into a clipboard
+    # write/read. On the host (WAYLAND_DISPLAY set) the default wl-copy
+    # provider is left in place, since it's more robust than OSC 52.
+    luaConfigRC.clipboard-osc52 = ''
+      if vim.env.WAYLAND_DISPLAY == nil and vim.env.DISPLAY == nil then
+        local ok, osc52 = pcall(require, "vim.ui.clipboard.osc52")
+        if ok then
+          vim.g.clipboard = {
+            name = "OSC 52",
+            copy = { ["+"] = osc52.copy("+"), ["*"] = osc52.copy("*") },
+            paste = { ["+"] = osc52.paste("+"), ["*"] = osc52.paste("*") },
+          }
+        end
       end
     '';
 

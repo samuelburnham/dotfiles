@@ -17,6 +17,7 @@
     ../../common/hyprland-desktop.nix
     ../../common/gnome-desktop.nix
     ./hardware-configuration.nix
+    ./microvm.nix
   ];
 
   # Renaming this breaks `rebuild` until bootstrapped: `nixos-rebuild
@@ -63,28 +64,66 @@
   #   powersave = false;
   # };
 
+  # 16 GB swapfile as overflow under memory pressure.
+  swapDevices = [
+    {
+      device = "/var/lib/swapfile";
+      size = 16 * 1024;
+    }
+  ];
+
+  # Prefer reclaiming file-backed cache over anonymous memory.
+  boot.kernel.sysctl."vm.swappiness" = 10;
+
   # TODO: Fix printing once new CUPS version is release
   # Had to remove and re-add printer in Gnome settings after adding the driver
   services.printing.drivers = [ pkgs.brlaser ];
 
-  # Automated backups to external drive
-  systemd.services.restic-backup = {
-    enable = true; # TODO: Is this needed?
-    description = "Restic backup";
-    serviceConfig = {
-      Type = "oneshot";
-      ExecStart = ''
-        ${pkgs.restic}/bin/restic backup /home/${username}/repos/dotfiles --password-file /home/${username}/restic-password
-      '';
-      EnvironmentFile = "/home/${username}/restic.env";
-    };
+  # Restic backups to the One Touch external USB drive.
+  # The drive isn't always connected, so it's mounted via systemd automount:
+  # nofail keeps boot from blocking on it, and x-systemd.automount defers the
+  # mount until first access — e.g. when the backup timer fires. x-gvfs-show
+  # keeps it visible in the Nautilus sidebar. Runs while it's absent fail, and
+  # Persistent=true catches up on the next mount.
+  fileSystems."/mnt/onetouch" = {
+    device = "/dev/disk/by-uuid/5EAC-B331";
+    fsType = "exfat";
+    options = [
+      "nofail"
+      "x-systemd.automount"
+      "x-systemd.idle-timeout=600"
+      "x-gvfs-show"
+      "uid=1000"
+      "gid=100"
+    ];
   };
-  systemd.timers.restic-backup = {
-    description = "Run backup daily";
-    wantedBy = [ "timers.target" ];
+
+  sops.secrets.restic-password = {
+    mode = "0400";
+    owner = username;
+  };
+  services.restic.backups.onetouch = {
+    repository = "/mnt/onetouch/NixOS-restic";
+    passwordFile = config.sops.secrets.restic-password.path;
+    paths = [ "/home/${username}" ];
+    exclude = [
+      "/home/${username}/.cache"
+      # Steam: game installs, caches, and local saves. Cloud-synced saves are
+      # recoverable from Steam; anything only stored here is not backed up.
+      "/home/${username}/.local/share/Steam"
+      # Rootless podman image/container storage; images are re-pullable.
+      "/home/${username}/.local/share/containers"
+    ];
     timerConfig = {
-      OnCalendar = "*:0/5";
+      # Daily at noon
+      OnCalendar = "*-*-* 12:00:00";
       Persistent = true;
     };
+    pruneOpts = [
+      "--keep-daily 7"
+      "--keep-weekly 4"
+      "--keep-monthly 6"
+    ];
   };
+  systemd.services.restic-backups-onetouch.unitConfig.RequiresMountsFor = "/mnt/onetouch";
 }

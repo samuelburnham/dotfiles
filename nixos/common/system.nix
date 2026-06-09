@@ -96,6 +96,9 @@
     extraGroups = [
       "networkmanager"
       "wheel"
+      # microvm host runs cloud-hypervisor as microvm:kvm; this lets the
+      # user reach /var/lib/microvms/*/notify.vsock for ssh-over-VSOCK.
+      "kvm"
     ];
   };
 
@@ -124,13 +127,34 @@
   sops.defaultSopsFormat = "yaml";
   sops.age.keyFile = "/home/${username}/.config/sops/age/keys.txt";
 
-  sops.secrets.nix-access-tokens = { };
+  # owner = sam so the user shell can read it to export NIX_CONFIG (for
+  # forwarding to the dev microvm); the nix daemon reads it as root anyway.
+  sops.secrets.nix-access-tokens.owner = username;
 
   # gh PAT, read by the user's shell rc and exported as GH_TOKEN.
   sops.secrets.gh-token = {
     mode = "0400";
     owner = username;
   };
+
+  # AWS + GCP credentials for Terraform and the cloud CLIs, read by the user's
+  # shell rc and exported (see base.nix). aws-* are the access-key pair;
+  # gcp-credentials is a service-account JSON that GOOGLE_APPLICATION_CREDENTIALS
+  # points at.
+  sops.secrets.aws-access-key-id = {
+    mode = "0400";
+    owner = username;
+  };
+  sops.secrets.aws-secret-access-key = {
+    mode = "0400";
+    owner = username;
+  };
+  # GCP disabled for now — no service-account key yet. Re-enable once
+  # `gcp-credentials` is added to secrets.yaml (and the export in base.nix).
+  # sops.secrets.gcp-credentials = {
+  #   mode = "0400";
+  #   owner = username;
+  # };
 
   # GitHub PAT for authenticated nix fetches — decrypted at runtime by sops-nix
   # This allows fetching private GitHub flake inputs with `github:org/name` URLs
@@ -144,7 +168,7 @@
     wget
     git
     sops
-    vim
+    usbutils
   ];
 
   environment.gnome.excludePackages = with pkgs; [

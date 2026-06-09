@@ -50,6 +50,26 @@ let
     fi
   '';
 
+  # Toggle the focused window in/out of the `magic` special workspace,
+  # following it either way. In a normal workspace → move into the
+  # scratchpad and show it. Already in the scratchpad → eject to the
+  # normal workspace on the focused monitor.
+  scratchToggle = pkgs.writeShellScript "hypr-scratch-toggle" ''
+    set -eu
+    ws=$(${pkgs.hyprland}/bin/hyprctl activewindow -j \
+         | ${pkgs.jq}/bin/jq -r '.workspace.name')
+    case "$ws" in
+      special:*)
+        target=$(${pkgs.hyprland}/bin/hyprctl monitors -j \
+                 | ${pkgs.jq}/bin/jq -r '.[] | select(.focused == true) | .activeWorkspace.id')
+        ${pkgs.hyprland}/bin/hyprctl dispatch movetoworkspace "$target"
+        ;;
+      *)
+        ${pkgs.hyprland}/bin/hyprctl dispatch movetoworkspace special:magic
+        ;;
+    esac
+  '';
+
   swayncLog = pkgs.writeShellScript "swaync-log" ''
     mkdir -p "$HOME/.local/share/swaync"
     printf '%s [%s] %s: %s\n' \
@@ -181,9 +201,10 @@ in
     playerctl
     pavucontrol
 
-    # Default Hyprland config (Super+Q binding) spawns `kitty`. Kept as a
-    # safety net if our config ever fails to load; Ghostty (from gui.nix)
-    # is the actual terminal.
+    # Host escape-hatch terminal — Ghostty itself runs inside the dev
+    # microvm, so kitty is the only host-native terminal. Bound to
+    # Super+Shift+Q below; the Hyprland default Super+Q binding still
+    # spawns it too if our config fails to load.
     kitty
 
     # Graphical power menu — Lock / Logout / Suspend / Hibernate / Reboot /
@@ -196,6 +217,46 @@ in
     # settings.
     pkgs-unstable.quickshell
   ];
+
+  # D-Bus VSOCK proxy for forwarding the VM's desktop notifications to the
+  # host — deferred. Re-enable alongside vm.nix's host-dbus-relay when you
+  # want notification support.
+  /*
+    systemd.user.services.dbus-vm-proxy = {
+      Unit = {
+        Description = "Filtered D-Bus proxy for dev microvm";
+        After = [ "graphical-session.target" ];
+        PartOf = [ "graphical-session.target" ];
+      };
+      Service = {
+        ExecStart = ''
+          ${pkgs.xdg-dbus-proxy}/bin/xdg-dbus-proxy \
+            unix:path=%t/bus \
+            %t/dbus-vm-proxy \
+            --filter \
+            --talk=org.freedesktop.Notifications
+        '';
+        Restart = "on-failure";
+        RestartSec = 2;
+      };
+      Install.WantedBy = [ "graphical-session.target" ];
+    };
+
+    systemd.user.services.dbus-vm-vsock = {
+      Unit = {
+        Description = "VSOCK relay for filtered D-Bus proxy";
+        After = [ "dbus-vm-proxy.service" ];
+        Requires = [ "dbus-vm-proxy.service" ];
+        PartOf = [ "graphical-session.target" ];
+      };
+      Service = {
+        ExecStart = "${pkgs.socat}/bin/socat VSOCK-LISTEN:9999,fork,reuseaddr UNIX-CONNECT:%t/dbus-vm-proxy";
+        Restart = "on-failure";
+        RestartSec = 2;
+      };
+      Install.WantedBy = [ "graphical-session.target" ];
+    };
+  */
 
   # Volume OSD as a Quickshell config. Subscribes to PipeWire sink +
   # source state so the popup shows on every volume/mute change —
@@ -388,7 +449,10 @@ in
 
     settings = {
       "$mod" = "SUPER";
-      "$terminal" = "ghostty";
+      # Super+T opens ghostty already ssh'd into the dev microvm (via the
+      # ssh-dev-vm wrapper, which forwards GH_TOKEN/NIX_CONFIG).
+      # Super+Shift+T (below) opens a plain host ghostty.
+      "$terminal" = "ghostty -e ssh-dev-vm";
       "$fileManager" = "nautilus";
       "$menu" = "fuzzel";
 
@@ -425,6 +489,11 @@ in
         # honour this. Path is expanded at eval time (Hyprland's `env`
         # values are literal strings, not shell-expanded at use site).
         "XDG_SCREENSHOTS_DIR,${config.home.homeDirectory}/Pictures/Screenshots"
+        # GDM doesn't propagate the session env to Hyprland, so GTK apps
+        # launched from keybind `exec` (e.g. wlogout via Super+Esc) miss
+        # the librsvg loader and render SVGs as broken-image placeholders.
+        # Services started under systemd-user pick this up separately.
+        "GDK_PIXBUF_MODULE_FILE,${pkgs.librsvg}/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache"
       ];
 
       # All session daemons (cliphist, nm-applet, blueman-applet, swaync,
@@ -484,7 +553,8 @@ in
         "$mod, C, exec, hyprpicker -a -f hex"
         "$mod SHIFT, D, exec, darkman toggle"
         "$mod, T, exec, $terminal"
-        "$mod SHIFT, T, layoutmsg, togglesplit"
+        # Plain host ghostty — not tied to the VM.
+        "$mod SHIFT, T, exec, ghostty"
 
         # Screenshots via hyprshot — every mode saves to
         # ~/Pictures/Screenshots AND copies the image to the clipboard;
@@ -510,6 +580,10 @@ in
         "$mod ALT, J, movewindow, d"
         "$mod ALT, K, movewindow, u"
         "$mod ALT, L, movewindow, r"
+
+        # Toggle the dwindle split orientation (horizontal/vertical) of the
+        # focused container.
+        "$mod ALT, T, togglesplit,"
 
         # Jump to a screen edge.
         # J/K cross the vertical monitor boundary (K → HDMI-A-1, J → DP-2).
@@ -561,7 +635,9 @@ in
         "$mod ALT, 0, movetoworkspace, 10"
 
         "$mod, S, togglespecialworkspace, magic"
-        "$mod SHIFT, S, movetoworkspace, special:magic"
+        # Toggle the focused window in/out of the magic scratchpad,
+        # following it to the destination workspace either way.
+        "$mod ALT, S, exec, ${scratchToggle}"
 
         "$mod, mouse_down, workspace, e+1"
         "$mod, mouse_up, workspace, e-1"
@@ -615,12 +691,12 @@ in
   };
 
   # Two Waybar instances, each pinned to one output (omitting `output`
-  # spawns on every monitor and races across rebuilds). `mainBar` on the
-  # ultrawide covers the GNOME top-right popup equivalent (workspaces,
+  # spawns on every monitor and races across rebuilds). `primaryBar` on
+  # the ultrawide covers the GNOME top-right popup equivalent (workspaces,
   # tray, idle inhibitor, audio, network, clock); nm-applet +
-  # blueman-applet surface in `tray`. `topBar` on HDMI-A-1 is minimal —
-  # just workspaces + focused window title — so the upper monitor's
-  # active workspace is visible at a glance.
+  # blueman-applet surface in `tray`. `secondaryBar` on HDMI-A-1 is
+  # minimal — just workspaces + focused window title — so the upper
+  # monitor's active workspace is visible at a glance.
   programs.waybar = {
     enable = true;
     systemd.enable = true;
@@ -874,7 +950,7 @@ in
         border: 1px solid @overlay0;
       }
     '';
-    settings.mainBar = {
+    settings.primaryBar = {
       output = [ "DP-2" ];
       layer = "top";
       position = "top";
@@ -912,6 +988,18 @@ in
         # styling if ever needed.
         format = "󰩨 {}"; # nf-md-resize
         tooltip = false;
+      };
+      "hyprland/window" = {
+        # Prefix the title with the app class so visually-identical
+        # terminals (ghostty + kitty share a theme) are distinguishable.
+        # `rewrite` keys are full-match regexes; the `(.*)` tail recaptures
+        # the title. Ghostty's Wayland class is the reverse-DNS app_id.
+        separate-outputs = true;
+        format = "{class}  {title}";
+        rewrite = {
+          "com.mitchellh.ghostty  (.*)" = "  ghostty  $1"; # nf-fa-terminal
+          "kitty  (.*)" = "  kitty  $1";
+        };
       };
       clock = {
         # Pango span (typecraft-style) colours just the calendar glyph
@@ -1078,7 +1166,7 @@ in
         tooltip-format-deactivated = "Click to inhibit idle";
       };
     };
-    settings.topBar = {
+    settings.secondaryBar = {
       output = [ "HDMI-A-1" ];
       layer = "top";
       position = "top";
@@ -1089,6 +1177,14 @@ in
         "hyprland/window"
       ];
       modules-right = [ ];
+      "hyprland/window" = {
+        separate-outputs = true;
+        format = "{class}  {title}";
+        rewrite = {
+          "com.mitchellh.ghostty  (.*)" = "  ghostty  $1"; # nf-fa-terminal
+          "kitty  (.*)" = "  kitty  $1";
+        };
+      };
     };
   };
 
@@ -1264,12 +1360,13 @@ in
       waybar-refresh = ''
         ${pkgs.procps}/bin/pkill -RTMIN+8 waybar || true
       '';
-      # Notify running boxvim instances instantly via RPC so the colorscheme
-      # switches without waiting for auto-dark-mode's 3-second poll interval.
-      # Sockets land at $XDG_RUNTIME_DIR/nvim-boxvim-<pid>.sock (apps/flake.nix).
-      # <Cmd> fires the Ex command regardless of current mode.
+      # Notify running nvim instances on the host instantly via RPC so the
+      # colorscheme switches without waiting for auto-dark-mode's 3-second
+      # poll. Default nvim socket layout is $XDG_RUNTIME_DIR/nvim.<pid>.0.
+      # <Cmd> fires the Ex command regardless of current mode. VM-side
+      # nvim instances aren't reachable from here (separate runtime dir).
       nvim-dark = ''
-        for sock in "''${XDG_RUNTIME_DIR:-/run/user/$UID}"/nvim-boxvim-*.sock; do
+        for sock in "''${XDG_RUNTIME_DIR:-/run/user/$UID}"/nvim.*.0; do
           [ -S "$sock" ] && ${pkgs.neovim}/bin/nvim --server "$sock" \
             --remote-send '<Cmd>DarkMode<CR>' 2>/dev/null &
         done
@@ -1284,7 +1381,7 @@ in
         ${pkgs.procps}/bin/pkill -RTMIN+8 waybar || true
       '';
       nvim-light = ''
-        for sock in "''${XDG_RUNTIME_DIR:-/run/user/$UID}"/nvim-boxvim-*.sock; do
+        for sock in "''${XDG_RUNTIME_DIR:-/run/user/$UID}"/nvim.*.0; do
           [ -S "$sock" ] && ${pkgs.neovim}/bin/nvim --server "$sock" \
             --remote-send '<Cmd>LightMode<CR>' 2>/dev/null &
         done
