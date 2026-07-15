@@ -1,60 +1,29 @@
 # Universal home-manager base — imported by every host entry. Contains
-# shell, tmux, CLI tools, worktrunk, git, claude-code, and other
+# shell, tmux, CLI tools, git, and other
 # TTY-friendly configs that work on both NixOS workstations and a remote
 # Ubuntu box. GUI bits live in ./gnome.nix; NixOS-only bits (rebuild
-# wrapper) live in ./alias.nix. Each host sets its own home.username /
-# homeDirectory; we avoid hardcoding them here.
+# wrapper) live in ./alias.nix. home.username / homeDirectory are derived
+# from the `username` specialArg here, uniform across every host.
 {
+  inputs,
   pkgs,
   pkgs-unstable,
-  pkgs-master,
-  inputs,
   lib,
   config,
+  username,
   ...
 }:
-let
-  rustfmtHook = ''
-    f=$(jq -r '.tool_input.file_path')
-    if [ -z "$f" ] || [ "$f" = "null" ]; then exit 0; fi
-    d=$(dirname "$f")
-    while [ "$d" != / ] && [ ! -f "$d/.envrc" ]; do d=$(dirname "$d"); done
-    if [ -f "$d/.envrc" ]; then
-      direnv exec "$d" rustfmt "$f"
-    else
-      rustfmt "$f"
-    fi
-  '';
-in
 {
-  imports = [
-    inputs.worktrunk.homeModules.default
-  ];
 
-  # worktrunk — upstream's home-manager module installs the package and
-  # wires `eval "$(wt config shell init bash)"` into bash.initExtra. Hooks
-  # and aliases still live in ~/.config/worktrunk/config.toml below.
-  programs.worktrunk = {
-    enable = true;
-    enableBashIntegration = true;
-  };
+  home.username = username;
+  home.homeDirectory = "/home/${username}";
 
   home.packages = with pkgs; [
+    # Bencher CLI — built from upstream's flake (see flake.nix `bencher` input).
+    inputs.bencher.packages.${pkgs.stdenv.hostPlatform.system}.default
     ripgrep
     htop
     jq
-    # nixpkgs-master only provides the build recipe (autopatchelf + the
-    # wrapper that wires in ripgrep/bubblewrap/socat); the actual release is
-    # self-pinned here so it tracks upstream independently of channel lag.
-    # Bump: set `version` to https://downloads.claude.ai/claude-code-releases/latest
-    # and paste `.platforms."linux-x64".checksum` from that release's manifest.json.
-    (pkgs-master.claude-code.overrideAttrs (old: rec {
-      version = "2.1.170";
-      src = pkgs.fetchurl {
-        url = "https://downloads.claude.ai/claude-code-releases/${version}/linux-x64/claude";
-        sha256 = "849e007277a0442ab27570d3e3d6d43787507946590e8dd1947e5a39b7081f9e";
-      };
-    }))
     sesh
     fzf
     # Used by the sesh-picker ctrl-f "find" tab below
@@ -111,161 +80,6 @@ in
     # name = "prod-box"
     # startup_command = "ssh prod-box"
   '';
-
-  # Claude Code config — settings.json + CLAUDE.md. `package = null`
-  # skips the module's own claude-code install since pkgs-master.claude-code
-  # is already in home.packages above. settings.json lives at
-  # ~/.claude/settings.json, which is virtiofs-shared from host into the
-  # dev microvm — host and VM both see the same file.
-  programs.claude-code = {
-    enable = true;
-    package = null;
-    settings = {
-      theme = "dark";
-      sandbox = {
-        enabled = true;
-        autoAllowBashIfSandboxed = true;
-        allowUnsandboxedCommands = true;
-        network.allowedDomains = [
-          "github.com"
-          "api.github.com"
-          "index.crates.io"
-        ];
-      };
-      permissions = {
-        disableBypassPermissionsMode = "disable";
-        # Auto-accept Edit/Write/MultiEdit without prompting. Bash and
-        # other tools still pass through the allow-list and inner sandbox.
-        defaultMode = "acceptEdits";
-        allow = [
-          "Read(${config.home.homeDirectory}/repos/**)"
-          "Glob(${config.home.homeDirectory}/repos/**)"
-          "Grep(${config.home.homeDirectory}/repos/**)"
-          "Edit(${config.home.homeDirectory}/repos/**)"
-          "Read(${config.home.homeDirectory}/.cargo/**)"
-          "Glob(${config.home.homeDirectory}/.cargo/**)"
-          "Grep(${config.home.homeDirectory}/.cargo/**)"
-          "Edit(${config.home.homeDirectory}/.cargo/**)"
-          "Read(/nix/store/**)"
-          "Glob(/nix/store/**)"
-          "Grep(/nix/store/**)"
-          "Bash(cargo build:*)"
-          "Bash(cargo check:*)"
-          "Bash(cargo run:*)"
-          "Bash(cargo test:*)"
-          "Bash(cargo fmt:*)"
-          "Bash(cargo clippy:*)"
-          "Bash(cargo xclippy:*)"
-          "Bash(lake build:*)"
-          "Bash(lake exe:*)"
-          "Bash(lake test:*)"
-          "Bash(nix develop:*)"
-          "Bash(nix build:*)"
-          "Bash(nix fmt:*)"
-          "Bash(nix flake show:*)"
-          "Bash(nix flake metadata:*)"
-          "Bash(nix eval:*)"
-          "Bash(grep:*)"
-          "Bash(rg:*)"
-          "Bash(fd:*)"
-          "Bash(jq:*)"
-          "Bash(tail:*)"
-          "Bash(head:*)"
-          "Bash(wc:*)"
-          "Bash(git status:*)"
-          "Bash(git log:*)"
-          "Bash(git diff:*)"
-          "Bash(git show:*)"
-          "Bash(git branch:*)"
-          "Bash(git remote -v:*)"
-          "Bash(gh api:*)"
-          "Bash(git check-ignore:*)"
-          "Bash(cargo bench:*)"
-          "Bash(ls:*)"
-          "Bash(find:*)"
-          "Bash(xxd:*)"
-          "Bash(awk:*)"
-          "WebFetch(domain:github.com)"
-          "WebFetch(domain:api.github.com)"
-          "WebFetch(domain:index.crates.io)"
-          "Read(/tmp/**)"
-          "Glob(/tmp/**)"
-          "Grep(/tmp/**)"
-        ];
-      };
-      hooks = {
-        PostToolUse = [
-          {
-            matcher = "Edit|Write|MultiEdit";
-            hooks = [
-              {
-                type = "command";
-                "if" = "Edit(**/*.rs)";
-                command = rustfmtHook;
-              }
-              {
-                type = "command";
-                "if" = "Write(**/*.rs)";
-                command = rustfmtHook;
-              }
-              {
-                type = "command";
-                "if" = "MultiEdit(**/*.rs)";
-                command = rustfmtHook;
-              }
-            ];
-          }
-        ];
-      };
-    };
-    memory.text = ''
-      # Research clones
-
-      `~/repos/clones/` contains third-party source trees cloned for read-only
-      research and context — not for editing. Use them to inspect upstream
-      implementations, cross-reference APIs, and answer "how does X actually
-      work" questions instead of guessing from training data.
-
-      Sorted by topic. New clones land in the matching topic dir.
-
-      Rules:
-      - Read-only. Don't edit, commit, or push here. If you need to modify
-        upstream code, fork into `~/repos/forks/` instead.
-      - Check here before WebFetching a repo's docs or source — the local
-        clone is authoritative for whatever commit it's pinned to.
-      - The clones aren't guaranteed up-to-date with upstream; if freshness
-        matters, note the checked-out commit or fetch first.
-
-      # Comments and docstrings
-
-      Comments and docstrings explain the code, not the author's process.
-      Never write a comment whose subject is you or this session — what you
-      did, why you changed it, what it replaces, what task it came from, or
-      which caller prompted it. That belongs in the commit message or PR
-      description and rots the moment the code moves.
-
-      A comment is only worth writing if a future reader — with no knowledge
-      of this conversation — would benefit from it. It should explain:
-      - *what* the code does, only when the code itself isn't self-evident
-        (rare — prefer better names first); or
-      - *why* the code is the way it is: a non-obvious constraint, a subtle
-        invariant, a workaround for a specific upstream bug, behavior that
-        would otherwise surprise a reader.
-
-      Concretely, never write:
-      - "Added X to fix Y", "Replaced the old Z", "Refactored from ..."
-      - "Used by the foo flow", "Called from bar.ts", "Handles the case
-        from issue #123"
-      - Restatements of the code ("increment i by 1", "return the result")
-      - TODOs referencing the current task ("TODO: wire this up once the
-        other PR lands") — track those in the PR, not the source.
-
-      This applies to every language's comment/docstring syntax (`//`, `#`,
-      `/** */`, `"""..."""`, `---`, `;;`, etc.) and to commit messages for
-      code *inside* diffs (the commit body itself is the right place for
-      process narrative; the code is not).
-    '';
-  };
 
   # tmux-which-key: replace the plugin's default menu with our own groups
   # (Sessions, Windows, Panes). Menu opens via `prefix + Space` (plugin
@@ -397,70 +211,6 @@ in
     $DRY_RUN_CMD "$py" "$build" "$cfg" "$init"
   '';
 
-  # worktrunk — `wt switch --create <branch>` spins up a new worktree as a
-  # sibling dir (default template) and fires this pre-start hook, which
-  # creates a dedicated tmux session for it and drops the current client
-  # into it. `wt remove` / `wt merge` reverse the whole thing.
-  home.file.".config/worktrunk/config.toml".text = ''
-    [pre-start]
-    tmux = """
-    # Worktrunk's default template creates sibling worktrees as
-    # `<repo>.<branch>`, so basename yields e.g. `dotfiles.test`. tmux's
-    # target-spec grammar always parses `.` as a `session.pane`
-    # separator — even inside a `=exact` prefix — which is unfixable at
-    # lookup time. Strip dots at the source so creation and lookup both
-    # see a bare session name. `tr . -` also covers dotted branch names
-    # like `v1.2.3`; worktrunk only sanitizes slashes, not dots.
-    S=$(basename "{{ worktree_path }}" | tr . -)
-    tmux new-session -d -s "$S" -c "{{ worktree_path }}"
-    # Guarded on $TMUX so calls from outside tmux are a no-op instead
-    # of erroring on "no current client".
-    [ -n "$TMUX" ] && tmux switch-client -t "=$S"
-    """
-    # Guarded on .envrc presence so worktrees in non-direnv repos don't
-    # error. `direnv allow` accepts a path and resolves the .envrc itself.
-    direnv = """
-    [ -f "{{ worktree_path }}/.envrc" ] && direnv allow "{{ worktree_path }}" || true
-    """
-
-    [pre-remove]
-    tmux = """
-    # Must match pre-start's transform so we target the session that
-    # was actually created. Error-swallow preserved: kill-session is a
-    # no-op if the session doesn't exist, and we don't want `wt remove`
-    # to fail on cleanup of a missing session.
-    S=$(basename "{{ worktree_path }}" | tr . -)
-    tmux kill-session -t "=$S" 2>/dev/null || true
-    """
-
-    # Short aliases. Aliases run as shell commands (not as wt subcommand
-    # names), so the `wt` prefix is explicit. `{{ args }}` forwards
-    # positional args verbatim with shell-safe escaping.
-    #
-    # `--no-cd` on the two switch variants suppresses worktrunk's shell-cd
-    # directive: the pre-start tmux hook already lands us in a session
-    # whose cwd is the new worktree, so sourcing a `cd` in the *original*
-    # shell would only drag the session we just left into the new dir —
-    # surprising when we swap back to it later. Leaving the flag off the
-    # plain `wt switch` / `wt switch --create` commands means the rare
-    # out-of-tmux invocation still gets shell-follow behavior by default.
-    [aliases]
-    s = "wt switch --no-cd {{ args }}"
-    c = "wt switch --create --no-cd {{ args }}"
-    m = "wt merge {{ args }}"
-    r = "wt remove {{ args }}"
-    l = "wt list {{ args }}"
-
-    # Sonnet over upstream's haiku default: commits are load-bearing
-    # history and branch diffs can run thousands of lines, where
-    # haiku's summarization drops important context. The rest of the
-    # flags strip Claude Code's normal scaffolding (skills, CLAUDE.md,
-    # tool loop, session write) so this behaves like a one-shot API
-    # call rather than an interactive agent run.
-    [commit.generation]
-    command = "CLAUDECODE= MAX_THINKING_TOKENS=0 claude -p --no-session-persistence --model=sonnet --tools=''' --disable-slash-commands --setting-sources=''' --system-prompt='''"
-  '';
-
   programs.bash = {
     enable = true;
     # Changes backup files `ls` color to dim cyan, otherwise they are invisible with solarized dark theme
@@ -474,12 +224,17 @@ in
       # no secret files — `ssh dev-vm` forwards both from the host session
       # (see SendEnv/AcceptEnv), so these reads simply no-op inside the VM.
       [ -r /run/secrets/gh-token ] && export GH_TOKEN="$(cat /run/secrets/gh-token)"
-      [ -r /run/secrets/nix-access-tokens ] && export NIX_CONFIG="$(cat /run/secrets/nix-access-tokens)"
-      # AWS + GCP creds for Terraform / aws / gcloud. Same guard: a no-op on
-      # hosts without these secret files (the ubuntu bench box, the microvm).
+      [ -r /run/secrets/rendered/nix-access-tokens ] && export NIX_CONFIG="$(cat /run/secrets/rendered/nix-access-tokens)"
+      # AWS creds for Terraform / aws CLI — the WRITE pair, host-only. Same
+      # guard: a no-op on hosts without these secret files (the ubuntu bench
+      # box, the microvm). The microvm never receives these; the ssh-dev-vm
+      # wrapper forwards a separate read-only pair instead (see gui.nix), so a
+      # compromised VM session can read infra state but not mutate it.
       [ -r /run/secrets/aws-access-key-id ] && export AWS_ACCESS_KEY_ID="$(cat /run/secrets/aws-access-key-id)"
       [ -r /run/secrets/aws-secret-access-key ] && export AWS_SECRET_ACCESS_KEY="$(cat /run/secrets/aws-secret-access-key)"
-      # GCP disabled for now — re-enable with the gcp-credentials secret in system.nix.
+      # Bencher CLI API key — forwarded into the dev microvm like GH_TOKEN.
+      [ -r /run/secrets/bencher-key ] && export BENCHER_API_KEY="$(cat /run/secrets/bencher-key)"
+      # GCP disabled for now — re-enable with the gcp-credentials secret in host.nix.
       # [ -r /run/secrets/gcp-credentials ] && export GOOGLE_APPLICATION_CREDENTIALS=/run/secrets/gcp-credentials
       # Ignore C-d at an empty prompt so a misclick doesn't exit bash (and
       # close Ghostty). C-Shift-w is the intentional close shortcut.
@@ -543,7 +298,10 @@ in
   };
 
   programs.direnv = {
-    enable = true;
+    # mkDefault so a host can switch direnv off with a plain `enable = false`
+    # (desktop.nix does, to keep .envrc/devshell auto-exec out of the
+    # ~/repos tree the dev microvm shares).
+    enable = lib.mkDefault true;
     enableBashIntegration = true;
     nix-direnv.enable = true;
   };
@@ -744,8 +502,29 @@ in
       set -agF status-right "#{E:@catppuccin_status_session}"
 
       set -g @continuum-restore 'on'
-      set -g @continuum-save-interval '10'
+      set -g @continuum-save-interval '5'
+
+      # tmux-assistant-resurrect: persist AI-assistant sessions across restarts.
+      # The post-save hook records each pane's Claude session id (via the
+      # SessionStart hook wired in claude.nix, keyed by the claude PID so two
+      # conversations in one directory don't collide); the post-restore hook
+      # relaunches `claude --resume <id>` in each restored pane. Assistants are
+      # deliberately kept OUT of @resurrect-processes — the hooks own resuming,
+      # and listing them there would instead start a bare session-less claude.
+      set -g @resurrect-hook-post-save-all "bash '${inputs.tmux-assistant-resurrect}/scripts/save-assistant-sessions.sh'"
+      set -g @resurrect-hook-post-restore-all "bash '${inputs.tmux-assistant-resurrect}/scripts/restore-assistant-sessions.sh'"
     '';
+  };
+
+  # nvim is the editor everywhere (the nvf package's vim/vi aliases resolve
+  # to nvim too). Set it as the general editor in this shared HM base so it
+  # holds in every interactive shell (hm-session-vars is sourced by the
+  # login shell via programs.bash above). The system-level default also
+  # points at nvim — common/base.nix's programs.neovim.defaultEditor — so
+  # host, guest, and the user's shells all agree.
+  home.sessionVariables = {
+    EDITOR = "nvim";
+    VISUAL = "nvim";
   };
 
   programs.git = {
@@ -757,6 +536,9 @@ in
       };
       init.defaultBranch = "main";
       rerere.enabled = true;
+      # Belt-and-suspenders over $EDITOR for git invocations that don't
+      # source the shell env (hooks, GUI clients).
+      core.editor = "nvim";
     };
   };
 

@@ -9,13 +9,17 @@
 }:
 {
   imports = [
-    ../../common/system.nix
+    ../../common/host.nix
     # Desktop primarily runs Hyprland; the matching home-manager overlay
-    # (home/sam/hyprland.nix) is wired via home/sam/desktop.nix in
+    # (home/modules/hyprland.nix) is wired via home/profiles/desktop.nix in
     # nixos/flake.nix. GNOME stays installed alongside as a fallback —
     # both desktop entries appear in GDM, pick whichever at login.
-    ../../common/hyprland-desktop.nix
-    ../../common/gnome-desktop.nix
+    ../../common/hyprland-wm.nix
+    ../../common/gnome-de.nix
+    # Root-owned /etc/claude-code/managed-settings.json — the enforced deny
+    # policy for the host-side Claude (home/profiles/desktop.nix), which it
+    # can't edit as an unprivileged user.
+    ../../common/claude-managed-settings.nix
     ./hardware-configuration.nix
     ./microvm.nix
   ];
@@ -56,6 +60,16 @@
   services.udev.extraRules = ''
     ACTION=="add", SUBSYSTEM=="usb", ATTRS{idVendor}=="29ea", ATTRS{idProduct}=="0362", ATTR{power/wakeup}="enabled"
   '';
+
+  # DDC/CI brightness control for the DisplayPort monitors. A desktop panel
+  # has no backlight sysfs, so brightness is driven over the monitor's I2C
+  # channel with ddcutil (VCP feature 0x10). hardware.i2c.enable loads
+  # i2c-dev, creates /dev/i2c-*, and defines the i2c group; the user must be
+  # in that group for non-root access. DDC/CI must also be enabled in the
+  # monitor's own OSD menu for any of this to take effect.
+  hardware.i2c.enable = true;
+  users.users.${username}.extraGroups = [ "i2c" ];
+  environment.systemPackages = [ pkgs.ddcutil ];
 
   # WiFi workarounds — neither solved poor connection after resuming from suspend
   # Solution: use Ethernet

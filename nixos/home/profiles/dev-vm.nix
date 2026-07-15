@@ -6,17 +6,15 @@
   pkgs,
   lib,
   inputs,
-  username,
   ...
 }:
 {
   imports = [
-    ./base.nix
-    ./alias.nix
+    ../modules/base.nix
+    ../modules/alias.nix
+    ../modules/claude.nix
+    ../modules/worktrunk.nix
   ];
-
-  home.username = username;
-  home.homeDirectory = "/home/${username}";
 
   home.packages = [
     inputs.self.packages.${pkgs.system}.nvim
@@ -39,30 +37,14 @@
     "ssh://git@github.com/"
   ];
 
+  # The dev microvm is the isolated sandbox this tooling is meant to run in,
+  # so default to "auto" mode: Claude auto-approves actions it classifies as
+  # safe and still blocks risky ones / suspected prompt injection. This plain
+  # value overrides base.nix's prompting default; the workstations keep it.
+  programs.claude-code.settings.permissions.defaultMode = "auto";
+
   # Make cargo fetch git deps via the git CLI so private deps go through
   # the credential helper + token (and the rewrite above) rather than
   # cargo's built-in fetcher, which ignores them.
   home.sessionVariables.CARGO_NET_GIT_FETCH_WITH_CLI = "true";
-
-  # VSOCK relay to host's filtered D-Bus proxy + matching session var —
-  # disabled while bringing up the basic VM. Re-enable alongside the
-  # dbus-vm-proxy / dbus-vm-vsock services in hyprland.nix.
-  /*
-    systemd.user.services.host-dbus-relay = {
-      Unit = {
-        Description = "Relay to host D-Bus notifications proxy over VSOCK";
-        After = [ "default.target" ];
-      };
-      Service = {
-        ExecStart = "${pkgs.socat}/bin/socat UNIX-LISTEN:%t/host-bus,fork,reuseaddr VSOCK-CONNECT:2:9999";
-        Restart = "on-failure";
-        RestartSec = 2;
-      };
-      Install.WantedBy = [ "default.target" ];
-    };
-
-    home.sessionVariables = {
-      DBUS_SESSION_BUS_ADDRESS = "unix:path=$XDG_RUNTIME_DIR/host-bus";
-    };
-  */
 }

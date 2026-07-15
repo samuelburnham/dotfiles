@@ -7,27 +7,35 @@
   pkgs,
   ...
 }:
+let
+  # Base GNOME shell extensions shared by every GNOME host. Used as packages
+  # below and, via _module.args, as dconf enabled-extensions UUIDs in each
+  # host (which append their own extras) — defined once so the package list
+  # and the enabled-extensions list can't drift.
+  baseExtensions = with pkgs.gnomeExtensions; [
+    pop-shell
+    caffeine
+    # Official Gnome top bar display for CPU, RAM, swap, and network usage
+    system-monitor
+    # Comprehensive top bar display for system info, I just use it for temps and fan speed
+    vitals
+    # Start apps in a specific workspace
+    auto-move-windows
+  ];
+in
 {
   imports = [
     ./gui.nix
   ];
 
-  home.packages =
-    (with pkgs; [
-      # Search backend for the pop-shell launcher (Super+/); the extension
-      # alone is just the UI and returns nothing without this daemon.
-      pop-launcher
-    ])
-    ++ (with pkgs.gnomeExtensions; [
-      pop-shell
-      caffeine
-      # Official Gnome top bar display for CPU, RAM, swap, and network usage
-      system-monitor
-      # Comprehensive top bar display for system info, I just use it for temps and fan speed
-      vitals
-      # Start apps in a specific workspace
-      auto-move-windows
-    ]);
+  _module.args.gnomeBaseExtensions = baseExtensions;
+
+  home.packages = [
+    # Search backend for the pop-shell launcher (Super+/); the extension
+    # alone is just the UI and returns nothing without this daemon.
+    pkgs.pop-launcher
+  ]
+  ++ baseExtensions;
 
   # These settings can be found in `dconf-editor` or by running `dconf watch /` and then
   # editing GUI settings, which will print values in the terminal.

@@ -9,6 +9,10 @@
 {
   programs.firefox = {
     enable = true;
+    # 26.05 moved the default profile location to $XDG_CONFIG_HOME/mozilla/firefox.
+    # Pin the pre-26.05 path so the existing ~/.mozilla/firefox profile keeps
+    # working in place rather than being abandoned for a fresh XDG one.
+    configPath = ".mozilla/firefox";
     policies = {
       DisplayBookmarksToolbar = "always";
       # Pre-answer Firefox's external-protocol confirmation dialog

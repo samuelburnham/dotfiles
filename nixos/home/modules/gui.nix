@@ -11,6 +11,7 @@
 {
   pkgs,
   pkgs-unstable,
+  pkgs-master,
   inputs,
   config,
   ...
@@ -18,7 +19,7 @@
 {
   imports = [
     ./firefox.nix
-    # Ghostty as the host-native terminal. vm.nix imports ghostty.nix
+    # Ghostty as the host-native terminal. dev-vm.nix imports ghostty.nix
     # directly (not via this file), so the microvm guest keeps its own
     # copy; path-dedup means the host's two DE overlays share this one.
     ./ghostty.nix
@@ -27,9 +28,15 @@
   home.packages =
     with pkgs;
     [
-      bitwarden-desktop
+      # Sourced from nixpkgs-unstable: stable's bitwarden-desktop pins EOL
+      # electron_39, which 26.05 marks insecure. The pinned unstable predates
+      # that EOL marking, so its build isn't refused.
+      pkgs-unstable.bitwarden-desktop
       vscode
-      zulip
+      # Sourced from nixpkgs-master: stable/unstable zulip still build with the
+      # EOL-flagged pnpm_10_29_2; master's 5.12.4 moved to pnpm_11, avoiding the
+      # insecure-package refusal without an allow-list.
+      pkgs-master.zulip
       spotify
       obsidian
       telegram-desktop
@@ -66,8 +73,28 @@
       # too; ssh's SendEnv (see desktop.nix) does the forwarding.
       (pkgs.writeShellScriptBin "ssh-dev-vm" ''
         [ -r /run/secrets/gh-token ] && export GH_TOKEN="$(cat /run/secrets/gh-token)"
-        [ -r /run/secrets/nix-access-tokens ] && export NIX_CONFIG="$(cat /run/secrets/nix-access-tokens)"
-        exec ${pkgs.openssh}/bin/ssh dev-vm "$@"
+        [ -r /run/secrets/rendered/nix-access-tokens ] && export NIX_CONFIG="$(cat /run/secrets/rendered/nix-access-tokens)"
+        [ -r /run/secrets/bencher-key ] && export BENCHER_API_KEY="$(cat /run/secrets/bencher-key)"
+        # Give the VM the READ-ONLY AWS pair only, never the host's write
+        # creds. Set unconditionally with a fallback so a missing RO secret
+        # fails closed (empty → no usable creds in the VM) instead of leaking
+        # whatever AWS_* the launching host shell holds. The write pair is
+        # deliberately absent from the dev-vm SendEnv list (desktop.nix), so a
+        # plain `ssh dev-vm` forwards no AWS creds at all; only this wrapper
+        # opts in, and only to the RO pair, via the per-invocation SendEnv.
+        export AWS_ACCESS_KEY_ID="$(cat /run/secrets/aws-access-key-id-ro 2>/dev/null)"
+        export AWS_SECRET_ACCESS_KEY="$(cat /run/secrets/aws-secret-access-key-ro 2>/dev/null)"
+        # No explicit command: open an interactive login shell starting in
+        # ~/repos (the shared work tree) rather than the VM home. ssh lands
+        # in $HOME by default, so cd before exec'ing the login shell.
+        if [ "$#" -eq 0 ]; then
+          exec ${pkgs.openssh}/bin/ssh \
+            -o SendEnv=AWS_ACCESS_KEY_ID -o SendEnv=AWS_SECRET_ACCESS_KEY \
+            -t dev-vm 'cd repos 2>/dev/null; exec "$SHELL" -l'
+        fi
+        exec ${pkgs.openssh}/bin/ssh \
+          -o SendEnv=AWS_ACCESS_KEY_ID -o SendEnv=AWS_SECRET_ACCESS_KEY \
+          dev-vm "$@"
       '')
     ];
 

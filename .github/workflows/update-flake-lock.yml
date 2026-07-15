@@ -3,8 +3,7 @@ name: update-flake-lock
 on:
   workflow_dispatch:
   schedule:
-    # Weekly, Sunday 00:00 UTC. Two PRs (one per flake) land at the same
-    # time so reviewing them in one sitting is natural.
+    # Weekly, Sunday 00:00 UTC.
     - cron: '0 0 * * 0'
 
 jobs:
@@ -27,23 +26,3 @@ jobs:
             dependencies
             automated
             nixos
-
-  apps:
-    name: "apps/flake.lock (nvim + claude)"
-    permissions:
-      contents: write
-      id-token: write
-      issues: write
-      pull-requests: write
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: DeterminateSystems/determinate-nix-action@v3
-      - uses: DeterminateSystems/update-flake-lock@main
-        with:
-          path-to-flake-dir: apps/
-          pr-title: "apps: update flake.lock (nvim, claude)"
-          pr-labels: |
-            dependencies
-            automated
-            apps

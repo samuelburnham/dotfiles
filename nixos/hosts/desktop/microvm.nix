@@ -101,20 +101,20 @@ in
     in
     {
       # A host rebuild updates this VM's `current` runner but leaves the
-      # running guest alone. Without this, a fully-declarative microvm
-      # defaults to restartIfChanged = true, so any host rebuild that
-      # changes the guest closure bounces the VM — and a cold boot here is
-      # ~50s because the guest faults its whole closure in over the virtiofs
-      # store. The store is shared read-only from the host, so a changed
-      # closure is already visible inside the VM; apply it live with
-      # `switch-to-configuration switch` (no reboot) or restart by hand when
-      # a kernel/hardware-shaped field below changes.
+      # running guest alone, so an unrelated host rebuild never bounces an
+      # in-progress session. With the shared store below, the rebuild also
+      # builds no per-guest store image, so it stays fast. Apply a new
+      # generation when you're ready with `systemctl restart microvm@dev`: the
+      # boot is a few seconds (the cloud-hypervisor vsock notify stall is fixed
+      # by microvm PR #493) and it re-registers the new closure into the guest
+      # Nix DB from regInfo. home.img and the ~/repos share survive the restart.
       restartIfChanged = false;
 
-      pkgs = import inputs.nixpkgs {
-        inherit system;
-        config.allowUnfree = true;
-      };
+      # null → microvm instantiates the guest's package set from its own
+      # nixpkgs.config (allowUnfree lives in common/base.nix) using the
+      # host's nixpkgs path, and applies the microvm guest overlay. An
+      # externally-built pkgs would instead make nixpkgs.config an error.
+      pkgs = null;
       specialArgs = {
         inherit
           inputs
@@ -133,7 +133,13 @@ in
           ...
         }:
         {
-          imports = [ inputs.home-manager.nixosModules.home-manager ];
+          imports = [
+            inputs.home-manager.nixosModules.home-manager
+            ../../common/base.nix
+            # Root-owned /etc/claude-code/managed-settings.json — the deny
+            # policy Claude runs under in the VM but can't edit from inside it.
+            ../../common/claude-managed-settings.nix
+          ];
 
           home-manager.useGlobalPkgs = true;
           home-manager.useUserPackages = true;
@@ -143,15 +149,10 @@ in
             pkgs-unstable = vmPkgs-unstable;
             pkgs-master = vmPkgs-master;
           };
-          home-manager.users.${username} = import ../../home/sam/vm.nix;
+          home-manager.users.${username} = import ../../home/profiles/dev-vm.nix;
 
           networking.hostName = "dev-vm";
           system.stateVersion = "25.11";
-
-          # Match the host so commit timestamps and logs read in local time
-          # with UTF-8 (the VM doesn't import common/system.nix).
-          time.timeZone = "America/New_York";
-          i18n.defaultLocale = "en_US.UTF-8";
 
           microvm = {
             hypervisor = "cloud-hypervisor";
@@ -196,16 +197,42 @@ in
               }
             ];
 
-            # Writable overlay so guest-side nix builds don't punch back into
-            # the host store. Image lives under /var/lib/microvms/dev/.
+            # /nix/store is shared read-only from the host over virtiofs (the
+            # ro-store share above), so a host rebuild builds no per-guest
+            # store image — `storeOnDisk` would pack the whole guest closure
+            # into an erofs image and rebuild it (~30s) on every closure
+            # change, which a shared base.nix/nixpkgs triggers constantly. The
+            # guest registers the booted closure into its Nix DB from regInfo
+            # at boot (registerClosure defaults true without storeOnDisk), so a
+            # fresh boot always has a consistent DB; a host-built generation
+            # becomes known to the guest after `systemctl restart microvm@dev`.
+            #
+            # Writable overlay so guest-side nix builds don't write into the
+            # read-only shared store. Image lives under /var/lib/microvms/dev/.
             writableStoreOverlay = "/nix/.rw-store";
             volumes = [
               {
-                # Writable layer over the shared ro host store — holds only
-                # paths built/fetched in the VM that aren't already on the
-                # host (VM nix builds, devshell closures, flake fetches). Big
-                # ceiling for heavy ZK/Rust/Lean toolchains; sparse, so it only
-                # consumes what's actually written.
+                # Writable upper layer over the shared read-only host store —
+                # holds paths built or fetched inside the VM that aren't
+                # already on the host (nix builds, devshell closures, flake
+                # fetches). Big ceiling for heavy ZK/Rust/Lean toolchains;
+                # sparse, so it only consumes what's actually written.
+                #
+                # This upper layer persists across reboots, so in-VM `nix` GC
+                # leaves overlayfs whiteouts here that mask paths in the
+                # read-only lower store, and an unclean host shutdown can
+                # corrupt its ext4. After a host NixOS upgrade the guest's new
+                # closure may need a path a stale whiteout hides — activation
+                # then fails in stage 1 (binaries can't load their libs) and
+                # the VM drops to an emergency/freeze instead of booting. The
+                # tell is the overlay /nix/store listing fewer entries than
+                # /nix/.ro-store. If a fresh boot breaks after an upgrade,
+                # delete this image — it only caches rebuildable VM-built
+                # paths, and home.img is separate — then rebuild. microvm
+                # recreates it empty when the VM next starts, which the rebuild
+                # itself does; no manual stop/start of microvm@dev needed:
+                #   rm /var/lib/microvms/dev/nix-store-overlay.img
+                #   nixos-rebuild switch --flake ~/repos/dotfiles/nixos#nixos
                 image = "nix-store-overlay.img";
                 mountPoint = "/nix/.rw-store";
                 size = 96 * 1024;
@@ -219,19 +246,6 @@ in
                 mountPoint = "/home";
                 size = 64 * 1024;
               }
-              # Persistent Nix DB (/nix/var) — deferred. The store overlay
-              # already persists the paths; this would also persist the DB so
-              # nix doesn't re-register/re-fetch them after a reboot. Needs the
-              # nix-var-load-db service below (also commented) because microvm's
-              # boot-time load-db runs before this volume mounts. Re-enable both
-              # together if reboot re-fetching becomes a real cost.
-              /*
-                {
-                  image = "nix-var.img";
-                  mountPoint = "/nix/var";
-                  size = 8 * 1024;
-                }
-              */
             ];
 
             interfaces = [
@@ -279,6 +293,12 @@ in
             "d /home/${username}/.local/state               0755 ${username} users -"
             "d /home/${username}/.local/state/nix           0755 ${username} users -"
             "d /home/${username}/.local/state/nix/profiles  0755 ${username} users -"
+            # nvim's log dir. Without it, a Neovim that logs in the guest
+            # (notably the headless `--server`/`--remote-send` clients, which
+            # skip the startup that would create it) falls back to writing a
+            # `.nvimlog` in its cwd — littering repos. Pre-creating it keeps
+            # the log at ~/.local/state/nvim/log instead.
+            "d /home/${username}/.local/state/nvim          0755 ${username} users -"
             "d /home/${username}/repos                       0755 ${username} users -"
           ];
 
@@ -288,14 +308,6 @@ in
           # can reach it. The firewall would only block host→VM access to dev
           # servers (e.g. a web server on 0.0.0.0 reached from host Firefox).
           networking.firewall.enable = false;
-
-          nix.settings = {
-            experimental-features = [
-              "nix-command"
-              "flakes"
-            ];
-            trusted-users = [ "@wheel" ];
-          };
 
           # Scheduled GC to bound the store overlay. The keep-outputs/
           # keep-derivations options are passed here rather than set globally,
@@ -310,37 +322,23 @@ in
             options = "--delete-older-than 14d --option keep-outputs true --option keep-derivations true";
           };
 
-          # Pairs with the deferred /nix/var volume above — re-registers the
-          # system closure into the persistent DB after the volume mounts
-          # (microvm's boot-time load-db runs too early). Re-enable both
-          # together.
-          /*
-            systemd.services.nix-var-load-db = {
-              description = "Register the system closure into the persistent Nix DB";
-              wantedBy = [ "multi-user.target" ];
-              after = [ "nix-var.mount" ];
-              requires = [ "nix-var.mount" ];
-              before = [ "home-manager-sam.service" ];
-              serviceConfig = {
-                Type = "oneshot";
-                RemainAfterExit = true;
-                ExecStart = pkgs.writeShellScript "nix-var-load-db" ''
-                  if [[ "$(cat /proc/cmdline)" =~ regInfo=([^ ]*) ]]; then
-                    ${config.nix.package.out}/bin/nix-store --load-db < "''${BASH_REMATCH[1]}"
-                  fi
-                '';
-              };
-            };
-          */
-
-          # GH_TOKEN (gh api) and NIX_CONFIG (private flake-input
-          # access-tokens) are forwarded per-session over ssh from the host,
-          # which holds the sops-decrypted values. The VM stores no copy.
-          services.openssh.settings.AcceptEnv = "GH_TOKEN NIX_CONFIG";
+          # GH_TOKEN (gh api), NIX_CONFIG (private flake-input access-tokens),
+          # BENCHER_API_KEY (bencher CLI), and the AWS_* keys are forwarded
+          # per-session over ssh from the host, which holds the sops-decrypted
+          # values; the VM stores no copy. The AWS pair carried here is the
+          # READ-ONLY key (terraform plan / describe only) — the ssh-dev-vm
+          # wrapper sends that and never the host's write pair (see
+          # home/modules/gui.nix, home/profiles/desktop.nix).
+          services.openssh.settings.AcceptEnv = [
+            "GH_TOKEN"
+            "NIX_CONFIG"
+            "BENCHER_API_KEY"
+            "AWS_ACCESS_KEY_ID"
+            "AWS_SECRET_ACCESS_KEY"
+          ];
 
           environment.systemPackages = with pkgs; [
             git
-            vim
             jq
             # Ghostty's terminfo entry only (not the GUI terminal), so the
             # xterm-ghostty TERM forwarded over ssh from the host terminal is

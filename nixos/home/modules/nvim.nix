@@ -40,6 +40,7 @@
   pkgs-unstable,
   lib,
   inputs,
+  flakeInputs,
   ...
 }:
 {
@@ -278,13 +279,8 @@
       auto-dark-mode = {
         package = pkgs.vimUtils.buildVimPlugin {
           pname = "auto-dark-mode.nvim";
-          version = "main";
-          src = pkgs.fetchFromGitHub {
-            owner = "f-person";
-            repo = "auto-dark-mode.nvim";
-            rev = "e300259ec777a40b4b9e3c8e6ade203e78d15881";
-            hash = "sha256-PhhOlq4byctWJ5rLe3cifImH56vR2+k3BZGDZdQvjng=";
-          };
+          version = flakeInputs.auto-dark-mode.shortRev;
+          src = flakeInputs.auto-dark-mode;
         };
         setup = ''
           local function apply(flavour)
@@ -308,28 +304,29 @@
       direnv = {
         package = pkgs.vimUtils.buildVimPlugin {
           pname = "direnv.nvim";
-          version = "main";
-          src = pkgs.fetchFromGitHub {
-            owner = "actionshrimp";
-            repo = "direnv.nvim";
-            rev = "0d2edd378dbdf2c653869772d761ad914219ba9d";
-            hash = "sha256-p2im4nUV0n9HQsjCA9oGJvTADfKGlCEr/RYWGlUszuU=";
-          };
+          version = flakeInputs.direnv-nvim.shortRev;
+          src = flakeInputs.direnv-nvim;
         };
         setup = ''
-          require('direnv-nvim').setup({
-            async = true,
-            on_direnv_finished = function ()
-              bufnr = vim.api.nvim_get_current_buf()
-              if vim.bo[bufnr].filetype == "rust" then
-                vim.lsp.start({
-                  name = 'rust-analyzer',
-                  cmd = {'rust-analyzer'},
-                  root_dir = vim.fs.root(0, {'Cargo.toml'}),
-                })
+          -- direnv.nvim shells out to the `direnv` binary on BufEnter, so only
+          -- set it up where direnv is installed: the dev VM auto-loads the
+          -- devshell, while the workstations (direnv intentionally absent) skip
+          -- it instead of throwing ENOENT on every buffer.
+          if vim.fn.executable('direnv') == 1 then
+            require('direnv-nvim').setup({
+              async = true,
+              on_direnv_finished = function ()
+                bufnr = vim.api.nvim_get_current_buf()
+                if vim.bo[bufnr].filetype == "rust" then
+                  vim.lsp.start({
+                    name = 'rust-analyzer',
+                    cmd = {'rust-analyzer'},
+                    root_dir = vim.fs.root(0, {'Cargo.toml'}),
+                  })
+                end
               end
-            end
-          })
+            })
+          end
         '';
       };
       # Could use smooth scroll with mouse wheel, see https://github.com/karb94/neoscroll.nvim/issues/50#issuecomment-1160094214
@@ -361,21 +358,10 @@
       persisted-nvim = {
         package = pkgs-unstable.vimPlugins.persisted-nvim;
         setup = ''
-          -- Autoload/autostart only inside boxvim ($BOXVIM set by the wrapper).
-          -- Host nvim doesn't auto-source session files (no poisoning vector
-          -- if a sandbox-written session ever got malicious) and doesn't
-          -- auto-write them (no clobbering boxvim's state from quick host
-          -- edits). Sessions still work manually via :Persisted load/start.
-          --
-          -- save_dir defaults to stdpath('data')/sessions/, which on both host
-          -- and boxvim resolves to /home/sam/.local/share/nvf/sessions/ (the
-          -- boxvim wrapper bind-mounts it so sessions persist across sandboxes
-          -- and are portable between the two environments).
-          local in_boxvim = vim.env.BOXVIM == "1"
           require("persisted").setup({
             save_dir = vim.fn.stdpath("data") .. "/sessions/",
-            autoload = in_boxvim,
-            autostart = in_boxvim,
+            autoload = true,
+            autostart = true,
             use_git_branch = false,
           })
         '';
@@ -1024,27 +1010,6 @@
       }
       {
         enable = true;
-        desc = "Format and save after external writes so Claude's auto-accept edits match project style";
-        event = [ "FileChangedShellPost" ];
-        pattern = [ "*" ];
-        # Route through conform so conform-registered formatters (alejandra
-        # for nix) win; fall back to the LSP for filetypes without a conform
-        # formatter. vim.lsp.buf.format directly would skip conform and pick
-        # up whatever the LSP ships with (e.g. nil's built-in nixfmt),
-        # producing a different style from :w.
-        callback = lib.generators.mkLuaInline ''
-          function(args)
-            local conform = require("conform")
-            local has_fmt = #conform.list_formatters(args.buf) > 0
-              or #vim.lsp.get_clients({bufnr = args.buf, method = "textDocument/formatting"}) > 0
-            if not has_fmt then return end
-            conform.format({bufnr = args.buf, async = false, lsp_format = "fallback"})
-            vim.api.nvim_buf_call(args.buf, function() vim.cmd.write() end)
-          end
-        '';
-      }
-      {
-        enable = true;
         desc = "Enter insert mode when starting terminal";
         event = [ "TermOpen" ];
         callback = lib.generators.mkLuaInline ''
@@ -1178,11 +1143,11 @@
     #utility.icon-picker.enable = true;
 
     # Route :terminal-launched editor invocations (git commit, fzf, etc.)
-    # back through flatten.nvim. system.nix sets a system-wide EDITOR=vim
-    # which spawns the real vim binary — flatten is nvim-only, so the
-    # child ignores the parent's NVIM socket and a full TUI opens in the
-    # terminal pane. vim.env scopes the override to this nvim and its
-    # subprocesses, leaving the system-level EDITOR untouched.
+    # back through flatten.nvim. Forcing EDITOR=nvim, scoped to this nvim
+    # via vim.env, makes a child editor connect to the parent's NVIM socket
+    # (flatten is nvim-only) instead of opening a nested full TUI in the
+    # terminal pane. Scoping it here keeps the routing intact regardless of
+    # what the surrounding environment resolved EDITOR to.
     #
     # The serverstart fallback covers the rare case where the auto-server
     # didn't come up at boot (e.g. the wrapper's $NVIM_LISTEN_ADDRESS

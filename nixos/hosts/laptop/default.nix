@@ -7,11 +7,11 @@
 }:
 {
   imports = [
-    ../../common/system.nix
+    ../../common/host.nix
     # Laptop stays on GNOME (the desktop host migrated to Hyprland). The
-    # GNOME system-level options moved out of common/system.nix so each
+    # GNOME system-level options moved out of common/host.nix so each
     # host opts in to its own graphical environment.
-    ../../common/gnome-desktop.nix
+    ../../common/gnome-de.nix
     ./hardware-configuration.nix
   ];
 
@@ -58,11 +58,11 @@
       SuspendThenHibernate = "yes";
     };
   };
-  # 30 minute time delay after suspend before hibernation
-  systemd.sleep.extraConfig = ''
-    AllowSuspendThenHibernate=yes
-    HibernateDelaySec=30m
-  '';
+  # 15 minute time delay after suspend before hibernation
+  systemd.sleep.settings.Sleep = {
+    AllowSuspendThenHibernate = "yes";
+    HibernateDelaySec = "15m";
+  };
 
   # If using laptop as daily driver, consider setting max charge to 80% for battery health/longevity
   # My laptop doesn't have a `/sys/class/power_supply/BAT*/charge_control_{start,end}_threshold`, so UPower isn't able to provide max charge as a Gnome power settings option. Could try adding support for my laptop to https://github.com/BeardOverflow/msi-ec or checking back in a few months

@@ -1,0 +1,25 @@
+name: check
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  flake-check:
+    name: "nixos: nix flake check"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: DeterminateSystems/determinate-nix-action@v3
+      # Eval-only: catches syntax errors, bad option names, and broken
+      # module wiring across both hosts, the microvm guest, and the
+      # standalone HM/nvim outputs without building any derivations.
+      - run: nix flake check --no-build ./nixos

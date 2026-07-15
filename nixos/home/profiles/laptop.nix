@@ -1,19 +1,15 @@
 # sam@laptop — Intel, MSI
 {
   pkgs,
-  inputs,
-  username,
+  gnomeBaseExtensions,
   ...
 }:
 {
   imports = [
-    ./base.nix
-    ./alias.nix
-    ./gnome.nix
+    ../modules/base.nix
+    ../modules/alias.nix
+    ../modules/gnome.nix
   ];
-
-  home.username = username;
-  home.homeDirectory = "/home/${username}";
 
   home.packages = with pkgs; [
     thunderbird
@@ -27,17 +23,13 @@
 
   # GNOME: Set enabled-extensions for laptop (shared + laptop-specific)
   dconf.settings = {
-    "org/gnome/shell" = {
-      enabled-extensions = with pkgs.gnomeExtensions; [
-        pop-shell.extensionUuid
-        caffeine.extensionUuid
-        system-monitor.extensionUuid
-        vitals.extensionUuid
-        auto-move-windows.extensionUuid
-        auto-power-profile.extensionUuid
-        power-off-options.extensionUuid
-      ];
-    };
+    "org/gnome/shell".enabled-extensions = map (e: e.extensionUuid) (
+      gnomeBaseExtensions
+      ++ (with pkgs.gnomeExtensions; [
+        auto-power-profile
+        power-off-options
+      ])
+    );
     # Laptop-specific keybind
     "org/gnome/desktop/wm/keybindings" = {
       close = [ "<Shift><Control>w" ];
