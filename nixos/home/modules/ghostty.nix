@@ -1,7 +1,7 @@
 # Ghostty terminal config — the host-native terminal. Super+T opens it
-# already ssh'd into the dev microvm (ssh-dev-vm); plain ghostty is a host
-# shell. Kept in its own file (imported by gui.nix) rather than inlined so
-# the config is easy to find and reuse.
+# already ssh'd into the dev microvm and attached to tmux (ssh-dev-vm);
+# plain ghostty is a host shell. Kept in its own file (imported by
+# gui.nix) rather than inlined so the config is easy to find and reuse.
 { config, ... }:
 {
   programs.ghostty = {

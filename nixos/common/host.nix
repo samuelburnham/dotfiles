@@ -35,6 +35,14 @@
     efiSysMountPoint = "/boot";
   };
 
+  # Reboot/shutdown otherwise stalls ~90s on "A stop job is running for User
+  # Manager for UID 1000": xdg-document-portal's FUSE mount (/run/user/1000/doc)
+  # ignores SIGTERM, so the user manager waits out the full stop timeout before
+  # SIGKILLing it. Cap the user manager's default stop timeout so stragglers are
+  # killed promptly. Scoped to user services only — system services (e.g. the
+  # dev microvm) keep their full graceful-shutdown window.
+  systemd.user.extraConfig = "DefaultTimeoutStopSec=10s";
+
   boot.enableContainers = true;
   virtualisation.containers.enable = true;
 

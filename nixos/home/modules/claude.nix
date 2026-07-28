@@ -33,6 +33,48 @@ let
       rustfmt "$f"
     fi
   '';
+
+  # Notification hook: replaces Claude's generic "waiting for input" desktop
+  # notification with one that names the worktree/session it came from, so a
+  # notification from a backgrounded session is identifiable. The built-in
+  # channel is turned off (preferredNotifChannel below) to avoid a duplicate;
+  # this hook fires regardless of that setting.
+  #
+  # Delivery is OSC 9 written to the controlling terminal — the same sequence
+  # Ghostty already turns into a system notification (see base.nix
+  # allow-passthrough). That crosses tmux and the VM→host ssh boundary
+  # unchanged, so it works with or without either; inside tmux the sequence is
+  # wrapped for passthrough (leading ESC doubled) or tmux swallows it. Writing
+  # to /dev/tty keeps it out of the hook's stdout, which Claude parses.
+  notifyHook = ''
+    input=$(cat)
+
+    name=""
+    if [ -n "''${TMUX:-}" ]; then
+      # Already looking at this pane (active pane of the current window on an
+      # attached client)? Then a desktop notification is just noise — skip it.
+      if [ "$(tmux display-message -p -t "''${TMUX_PANE:-}" \
+              '#{session_attached}#{window_active}#{pane_active}' 2>/dev/null)" = "111" ]; then
+        exit 0
+      fi
+      name=$(tmux display-message -p -t "''${TMUX_PANE:-}" '#S' 2>/dev/null || true)
+    fi
+    if [ -z "$name" ]; then
+      cwd=$(printf '%s' "$input" | jq -r '.cwd // empty' 2>/dev/null)
+      [ -z "$cwd" ] && cwd="$PWD"
+      top=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null || true)
+      name=$(basename "''${top:-$cwd}")
+    fi
+
+    msg=$(printf '%s' "$input" | jq -r '.message // "is waiting for your input"' 2>/dev/null)
+    body="$name — $msg"
+
+    if [ -n "''${TMUX:-}" ]; then
+      printf '\033Ptmux;\033\033]9;%s\a\033\\' "$body" > /dev/tty 2>/dev/null || true
+    else
+      printf '\033]9;%s\a' "$body" > /dev/tty 2>/dev/null || true
+    fi
+  '';
 in
 {
   # settings.json + CLAUDE.md. home-manager writes settings.json to
@@ -61,6 +103,21 @@ in
     });
     settings = {
       theme = "dark";
+      # Suppress Claude's own generic desktop notification; the Notification
+      # hook below emits a replacement that names the originating
+      # worktree/session. The hook fires independent of this channel setting.
+      preferredNotifChannel = "notifications_disabled";
+      # Background/fleet-view sessions edit the checkout in place instead of
+      # spinning up their own git worktree. Worktrees here are made by hand,
+      # one Claude per worktree with a couple of agents inside it; the
+      # auto-isolation would otherwise nest a second, wrongly-based worktree.
+      worktree.bgIsolation = "none";
+      # Don't auto-fetch the claude.ai account connectors (Gmail, Calendar,
+      # Drive, ...) into the CLI. They're attached to the claude.ai account,
+      # not configured here, and surface as an unauthenticated-MCP-server
+      # warning every session. Off keeps the CLI to locally-declared MCP
+      # servers only; the connectors stay available in the claude.ai web app.
+      disableClaudeAiConnectors = true;
       # Opt out of non-essential network calls individually rather than via the
       # CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC umbrella — and crucially NOT via
       # DISABLE_TELEMETRY. Both put claude into "restricted traffic" mode (the
@@ -105,12 +162,11 @@ in
       };
       permissions = {
         # Prompt before applying Edit/Write/MultiEdit by default. mkDefault so
-        # the disposable/isolated VMs (dev microvm, Ubuntu cloud box) default
-        # to "auto" mode with a plain value (see dev-vm.nix / ubuntu.nix). The
-        # persistent workstations keep this prompting default but leave the
-        # unattended modes unlocked, so auto/bypass can still be toggled on by
-        # hand (Shift+Tab) for a session. Bash and other tools still pass the
-        # allow-list and inner sandbox regardless of mode.
+        # the disposable/isolated VMs (dev microvm, Ubuntu cloud box) override
+        # with a plain "auto" (see dev-vm.nix / ubuntu.nix); the persistent
+        # workstations keep this prompting default. Any mode can still be
+        # toggled by hand (Shift+Tab) for a session, and Bash and other tools
+        # pass the allow-list and inner sandbox regardless of mode.
         defaultMode = lib.mkDefault "default";
         allow = [
           "Read(${config.home.homeDirectory}/repos/**)"
@@ -150,13 +206,10 @@ in
           "Bash(git show:*)"
           "Bash(git branch:*)"
           "Bash(git remote -v:*)"
-          "Bash(gh api:*)"
           "Bash(git check-ignore:*)"
           "Bash(cargo bench:*)"
           "Bash(ls:*)"
-          "Bash(find:*)"
           "Bash(xxd:*)"
-          "Bash(awk:*)"
           "WebFetch(domain:github.com)"
           "WebFetch(domain:api.github.com)"
           "WebFetch(domain:index.crates.io)"
@@ -196,6 +249,17 @@ in
               {
                 type = "command";
                 command = "bash '${inputs.tmux-assistant-resurrect}/hooks/claude-session-cleanup.sh'";
+              }
+            ];
+          }
+        ];
+        Notification = [
+          {
+            matcher = "";
+            hooks = [
+              {
+                type = "command";
+                command = notifyHook;
               }
             ];
           }
@@ -299,8 +363,51 @@ in
 
       Never add a `Co-Authored-By: Claude ...` trailer — or any Claude/Anthropic
       co-author or attribution line — to git commits or PR descriptions.
+
+      # Claude config location
+
+      Never create or write to a `.claude/` directory inside a repository — no
+      project-scoped `settings.json`, hooks, skills, agents, commands, or memory
+      under a repo. Put all Claude configuration in the global `~/.claude/`
+      instead. This applies to everything, including tools/skills that default to
+      writing project config (e.g. permission allowlists, hooks): target
+      `~/.claude/` or ask, never the repo. If a task seems to require repo-local
+      `.claude/` config, stop and confirm first.
+
+      # Memory
+
+      Record durable facts, preferences, and operational lessons as edits to
+      THIS file (`~/repos/dotfiles/nixos/home/modules/claude.nix`) — add a short
+      topical section below. Do NOT write them to `~/.claude/projects/*/memory/`:
+      that path is home-manager-managed or ephemeral VM state and is not
+      version-controlled, so it is lost on reprovision. Edits here need a
+      `home-manager switch` to take effect. Keep entries terse — everything here
+      loads into every session's context.
+
+      # Nix store safety
+
+      Never run `du` — or any recursive file walk (`find`, `ls -R`, `wc` over a
+      tree) — over the Nix store or other multi-hundred-GB trees. On this host
+      the store is a large shared volume, so it means millions of `stat()` calls
+      (sustained CPU + I/O) and can run for hours; one such `du` had to be killed
+      by restarting the microVM. For free space use `df -h <path>`; for a
+      specific store path's size use `nix path-info -Sh <path>`. If a heavy
+      command gets backgrounded, verify its PID is actually dead — don't trust a
+      `pkill` that can itself be timed out.
     '';
   };
+
+  # On resume, Claude offers to restart from a summary instead of the full
+  # transcript ("This session is 3h old and 120k tokens"). It only asks when the
+  # session is both older than CLAUDE_CODE_RESUME_THRESHOLD_MINUTES (70) and
+  # bigger than CLAUDE_CODE_RESUME_TOKEN_THRESHOLD, whose 100k default is far
+  # too eager against a 1M context — raised here so the offer only shows up for
+  # sessions actually approaching the limit.
+  # The dialog's own "Don't ask me again" only sets resumeReturnDismissed in
+  # ~/.claude.json, which Claude owns and rewrites, so it can't be declared here.
+  # This must be a real environment variable: values in the settings.json `env`
+  # block are filtered against a fixed allowlist that omits this one.
+  home.sessionVariables.CLAUDE_CODE_RESUME_TOKEN_THRESHOLD = "600000";
 
   # Claude Code treats ~/.claude/settings.json as its own mutable runtime
   # config and periodically rewrites it — replacing the read-only store

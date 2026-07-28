@@ -13,6 +13,52 @@
   username,
   ...
 }:
+let
+  # Patched copy of tmux-assistant-resurrect with two fixes for this setup.
+  #
+  # (1) plugin-dir accumulation: the claude launcher (claude.nix) always
+  #     prepends `--plugin-dir`, and resurrect saves each pane's full argv and
+  #     replays it verbatim, so a resumed command gained one more `--plugin-dir`
+  #     every reboot. Stripping it from the saved args in extract_cli_args lets
+  #     the launcher re-add exactly one; the count self-heals on the next restore.
+  #
+  # (2) stale session ids: resurrect records a session id at SessionStart, but
+  #     Claude keeps a transcript only for sessions with content and prunes old
+  #     ones, so a saved id can outlive its transcript and `--resume` then fails
+  #     with "No conversation found". _claude_resume_cmd checks the transcript
+  #     exists first, otherwise warning and launching a fresh claude in the pane.
+  resumeGuardLib = pkgs.writeText "lib-resume-guard.sh" ''
+    # Emit the command the restore hook sends to a pane: a normal --resume when
+    # the session's transcript still exists, else a warning then a fresh claude.
+    # $1=base command, $2=quoted session id, $3=raw session id, $4=cwd. Claude's
+    # project-dir name is the cwd with every non-alphanumeric mapped to a dash.
+    _claude_resume_cmd() {
+      local proj transcript warn
+      proj=$(printf '%s' "$4" | sed 's#[^a-zA-Z0-9]#-#g')
+      transcript="$HOME/.claude/projects/$proj/$3.jsonl"
+      if [ -s "$transcript" ]; then
+        printf '%s --resume %s' "$1" "$2"
+      else
+        warn="tmux-assistant-resurrect: saved session $3 has no transcript, starting a fresh claude"
+        printf 'echo %s; sleep 2; %s' "$(posix_quote "$warn")" "$1"
+      fi
+    }
+  '';
+  tmux-assistant-resurrect-scripts =
+    pkgs.runCommand "tmux-assistant-resurrect-patched" { } ''
+      cp -r ${inputs.tmux-assistant-resurrect} "$out"
+      chmod -R u+w "$out"
+      cp ${resumeGuardLib} "$out/scripts/lib-resume-guard.sh"
+
+      substituteInPlace "$out/scripts/save-assistant-sessions.sh" \
+        --replace-fail "sed -E 's/  +/ /g" "sed -E 's/--plugin-dir +[^ ]+//g; s/  +/ /g"
+
+      substituteInPlace "$out/scripts/restore-assistant-sessions.sh" \
+        --replace-fail 'source "$SCRIPT_DIR/lib-detect.sh"' 'source "$SCRIPT_DIR/lib-detect.sh"; source "$SCRIPT_DIR/lib-resume-guard.sh"' \
+        --replace-fail 'resume_cmd="command claude''${safe_cli_args}''${safe_model_arg} --resume ''${safe_sid}"' 'resume_cmd=$(_claude_resume_cmd "command claude''${safe_cli_args}''${safe_model_arg}" "''${safe_sid}" "''${session_id}" "''${cwd}")' \
+        --replace-fail 'resume_cmd="command claude --resume ''${safe_sid}"' 'resume_cmd=$(_claude_resume_cmd "command claude" "''${safe_sid}" "''${session_id}" "''${cwd}")'
+    '';
+in
 {
 
   home.username = username;
@@ -31,13 +77,16 @@
     # nvim-which-key-style bindings viewer for tmux. Shows every binding
     # (user-added and tmux defaults): `-a` includes un-noted entries and
     # `-N` uses the note for noted ones, falling back to the command.
+    # The mouse/wheel/click bindings tmux ships in the root and copy-mode
+    # tables have long command bodies and no note, so they dominate the
+    # list without describing a key a reader would press — filter them out.
     # Trusts tmux's built-in column padding rather than reformatting —
     # our own `column -t` reflow broke alignment when a note had enough
     # internal whitespace to look like a column break. Piped through
     # `less` so long lists scroll and `q` quits.
     (pkgs.writeShellScriptBin "tmux-which-key-all" ''
       set -euo pipefail
-      tmux list-keys -aN 2>/dev/null | sort | ${pkgs.less}/bin/less -R
+      tmux list-keys -aN 2>/dev/null | grep -vE '(Mouse|Wheel|Click)' | sort | ${pkgs.less}/bin/less -R
     '')
     # sesh session-switcher popup invoked by `prefix + o` in tmux. Kept as a
     # shell script because the fzf binding flags are too ugly to embed
@@ -62,18 +111,56 @@
       [ -z "$sel" ] && exit 0
       exec sesh connect "$sel"
     '')
+    # Land back in tmux exactly where you left off — the command the
+    # ssh-dev-vm wrapper (home/modules/gui.nix) runs on connect.
+    (pkgs.writeShellScriptBin "tmux-resume" ''
+      # Server already running (detached, or reconnecting a second window):
+      # attach to its most-recently-active session.
+      tmux attach 2>/dev/null && exit 0
+
+      # No server yet — a fresh VM boot. Bring the server up by creating AND
+      # attaching a session (via sesh), NOT a bare `tmux start-server`. A
+      # client MUST be attached while continuum auto-restores: resurrect
+      # selects the session that was active at save time with `switch-client`,
+      # and the assistant hook replays `claude --resume` into its pane — both
+      # silently no-op ("no current client") if the server comes up
+      # client-less. A client-less start-server therefore restores the pane
+      # layout (that part needs no client) but leaves claude dead and drops
+      # you in the wrong session. Starting the server with an attached client
+      # lets that same restore switch us to the most-recent session and resume
+      # claude. `sesh connect` also creates the fallback ~/repos session when
+      # there's nothing saved to restore (first-ever boot).
+      exec sesh connect ~/repos
+    '')
+    # Replay saved Claude sessions into the current tmux layout — the same
+    # script resurrect's post-restore hook uses. Resumes claude in any
+    # restored-but-blank pane that had one (it skips panes already running
+    # claude). Run by hand anytime, and fired automatically on first client
+    # attach via claude-resume-boot below.
+    (pkgs.writeShellScriptBin "claude-resume" ''
+      exec bash ${tmux-assistant-resurrect-scripts}/scripts/restore-assistant-sessions.sh
+    '')
+    # The client-attached tmux hook (see extraConfig) runs this on every
+    # attach; the guard makes it fire only ONCE per server — i.e. the first
+    # time you connect after a fresh boot, when the layout is restored and a
+    # client is finally present. continuum's own post-restore hook can't do
+    # this: it runs client-less during restore, where resurrect's
+    # switch-client and the assistant replay both silently no-op, so the
+    # panes come back but claude doesn't. The once-guard also stops a plain
+    # reattach from relaunching an assistant you deliberately closed.
+    (pkgs.writeShellScriptBin "claude-resume-boot" ''
+      [ -n "$(tmux show-option -gqv @assistants_resumed 2>/dev/null)" ] && exit 0
+      tmux set-option -g @assistants_resumed on
+      exec claude-resume
+    '')
   ];
 
-  # sesh config — declarative. Wildcard rule means every directory under
-  # ~/repos (project roots AND worktrees) connects with `nvim`
-  # as the startup command. Additional explicit [[session]] entries below
-  # for SSH remotes.
+  # sesh config — declarative. Sessions open as a single pane; the Claude
+  # pane is set up by hand once per project and then persists across tmux
+  # restarts via resurrect/continuum, so no startup_command auto-layout is
+  # needed. Explicit [[session]] entries below for SSH remotes.
   home.file.".config/sesh/sesh.toml".text = ''
     #:schema https://github.com/joshmedeski/sesh/raw/main/sesh.schema.json
-
-    [[wildcard]]
-    pattern = "~/repos/**"
-    startup_command = "nvim"
 
     # SSH remote sessions — uncomment and fill in:
     # [[session]]
@@ -225,11 +312,10 @@
       # (see SendEnv/AcceptEnv), so these reads simply no-op inside the VM.
       [ -r /run/secrets/gh-token ] && export GH_TOKEN="$(cat /run/secrets/gh-token)"
       [ -r /run/secrets/rendered/nix-access-tokens ] && export NIX_CONFIG="$(cat /run/secrets/rendered/nix-access-tokens)"
-      # AWS creds for Terraform / aws CLI — the WRITE pair, host-only. Same
-      # guard: a no-op on hosts without these secret files (the ubuntu bench
-      # box, the microvm). The microvm never receives these; the ssh-dev-vm
-      # wrapper forwards a separate read-only pair instead (see gui.nix), so a
-      # compromised VM session can read infra state but not mutate it.
+      # AWS write creds for Terraform / the aws CLI, exported on hosts that
+      # hold the secret files. A no-op where they're absent (the ubuntu bench
+      # box, the microvm); the dev microvm instead receives the read-only pair
+      # as env vars forwarded by the ssh-dev-vm wrapper (see gui.nix).
       [ -r /run/secrets/aws-access-key-id ] && export AWS_ACCESS_KEY_ID="$(cat /run/secrets/aws-access-key-id)"
       [ -r /run/secrets/aws-secret-access-key ] && export AWS_SECRET_ACCESS_KEY="$(cat /run/secrets/aws-secret-access-key)"
       # Bencher CLI API key — forwarded into the dev microvm like GH_TOKEN.
@@ -251,6 +337,17 @@
           command tmux "$@"
         fi
       }
+
+      # Ghostty draws its bar cursor (cursor-style=bar) once at startup and,
+      # with cursor shell-integration disabled (no-cursor), never re-asserts
+      # it. A program that sets its own cursor shape and resets to the
+      # terminal default on exit — notably nvim as $EDITOR for `git commit`
+      # or rebase — leaves a block behind. Re-emit the bar before each prompt
+      # so the shell cursor stays a blinking bar (\033[5 q; use \033[6 q for a
+      # steady bar). Ghostty still draws its own hollow block when the window
+      # loses focus, independent of this shape. Prepended to PROMPT_COMMAND so
+      # it coexists with starship's.
+      PROMPT_COMMAND="printf '\033[5 q'; $PROMPT_COMMAND"
     '';
   };
 
@@ -315,6 +412,11 @@
 
   programs.tmux = {
     enable = true;
+    # 3.7b from unstable (stable 26.05 ships 3.6a) for `command-prompt -e`
+    # (the prefix+W worktree prompt below): -e makes an empty entry cancel
+    # instead of running the command with a blank argument. Shared by host
+    # and VM alike since this is base.nix.
+    package = pkgs-unstable.tmux;
     shortcut = "Space";
     mouse = true;
     terminal = "tmux-256color";
@@ -322,7 +424,28 @@
     plugins = with pkgs.tmuxPlugins; [
       sensible
       resurrect
-      continuum
+      {
+        # @continuum-restore MUST be set BEFORE continuum's run-shell. At
+        # load the plugin backgrounds continuum_restore.sh, which reads
+        # @continuum-restore right away to decide whether to auto-restore
+        # on boot — the plugin's own `sleep 1` only happens AFTER that
+        # check. Setting it from the main extraConfig (which home-manager
+        # emits after every plugin run-shell) leaves it unset when the
+        # check runs, so restore-on-boot silently never fires — saves keep
+        # accumulating but nothing is ever restored. Per-plugin extraConfig
+        # lands immediately before this plugin's run-shell, winning the
+        # race. save-interval rides along for locality.
+        plugin = continuum;
+        extraConfig = ''
+          set -g @continuum-restore 'on'
+          # Autosave every minute (not the 5-min default): a save is a
+          # ~1.2s async background job — a 0.25s metadata dump plus the
+          # ~0.95s assistant-session scan that records claude session ids —
+          # so it never blocks input, and the tighter interval shrinks the
+          # window in which a reboot loses just-made layout/claude state.
+          set -g @continuum-save-interval '1'
+        '';
+      }
       {
         # Catppuccin status bar. Options must be set BEFORE catppuccin.tmux
         # runs so the flavor and styling take effect; put them in the
@@ -378,19 +501,37 @@
       # inside tmux.
       set -g allow-passthrough on
 
+      # Accept OSC 52 clipboard writes from programs in the pane, not just
+      # from tmux's own copy commands. tmux's default `external` drops an
+      # application's OSC 52 outright — it only forwards selections made by
+      # tmux itself — which leaves nvim's `y` dead in the microvm, where the
+      # headless session has no Wayland clipboard and OSC 52 out to the host's
+      # ghostty is the only route (see nvim.nix). `on` also has tmux mirror
+      # each accepted write into its own paste buffer, so `prefix + ]` pastes
+      # what the program copied.
+      set -g set-clipboard on
+
       # `keyMode = "vi"` above covers copy-mode navigation (h/j/k/l/w/b/e,
       # /, ?, n/N, etc.). tmux's vi mode doesn't bind `v` or `y` though, so
       # add them: v begins selection, y yanks via wl-copy so the result
       # lands in the Wayland clipboard (copy-pipe-and-cancel also keeps it
-      # in tmux's paste buffer and exits copy-mode). Enter copy-mode with
-      # `prefix + [`, paste with `prefix + ]`. MouseDragEnd1Pane routes
-      # mouse drag-release through the same pipe so plain drag-select
+      # in tmux's paste buffer and exits copy-mode). MouseDragEnd1Pane
+      # routes mouse drag-release through the same pipe so plain drag-select
       # respects pane boundaries and lands in the system clipboard;
       # Shift-drag still bypasses tmux entirely for terminal-native
       # selection across panes.
+      #
+      # nvim-shaped copy-mode: enter with `prefix + Escape` (drop from live
+      # typing into a Normal/Visual navigator over the scrollback), leave
+      # with `i` or `a` — the vi keys that resume insert, landing you back at
+      # the shell cursor. `q` still cancels; `prefix + [` still enters via
+      # tmux's default. Paste with `prefix + ]`.
+      bind -N "» copy mode" Escape copy-mode
       bind -T copy-mode-vi v send-keys -X begin-selection
       bind -T copy-mode-vi y send-keys -X copy-pipe-and-cancel 'wl-copy'
       bind -T copy-mode-vi MouseDragEnd1Pane send-keys -X copy-pipe-and-cancel 'wl-copy'
+      bind -T copy-mode-vi i send-keys -X cancel
+      bind -T copy-mode-vi a send-keys -X cancel
 
       # Jump between shell prompts in copy-mode, anchored on OSC 133
       # semantic-prompt markers emitted by Ghostty's shell integration.
@@ -479,16 +620,40 @@
       # Bounce between the two most-recently-attached sessions
       bind -N "» last session (sesh)" Tab run-shell "sesh last"
       # Kill the current session; with detach-on-destroy off, tmux stays in
-      # the next session instead of quitting.
-      bind -N "» kill current session" k confirm -p "Kill current session? (y/N):" kill-session
+      # the next session instead of quitting. X completes tmux's own kill
+      # ladder — x = pane, & = window (both defaults, confirm-guarded),
+      # X = session.
+      bind -N "» kill current session" X confirm -p "Kill current session? (y/N):" kill-session
       bind -rN "» prev session" '(' switch-client -p\; refresh-client -S
       bind -rN "» next session" ')' switch-client -n\; refresh-client -S
       # Show my described bindings in a popup.
       bind -N "» show all bindings" '?' display-popup -E -w 70% -h 70% tmux-which-key-all
 
+      # Create a git worktree (and its tmux session) without leaving tmux:
+      # prompt for a branch name, then run worktrunk from the active pane's
+      # directory. worktrunk's pre-start hook (worktrunk.nix) creates the
+      # session and switches this client into it — identical to typing
+      # `wt c <branch>` in a shell. The pane path is embedded in the shell
+      # command because run-shell format-expands only the command string;
+      # its -c flag is taken verbatim, and the default job cwd is the
+      # *session's* start dir, which is wrong once a pane has cd'd into a
+      # different repo. Only functional where worktrunk is installed (dev
+      # VM, ubuntu box); on hosts the output view shows command-not-found.
+      # -e (tmux 3.7+): empty input cancels the prompt instead of running
+      # worktrunk with an empty branch name.
+      bind -N "» new worktree + session (worktrunk)" W command-prompt -e -p "new worktree branch:" "run-shell \"cd '#{pane_current_path}' && wt switch --create --no-cd '%%'\""
+
       # Recommended by sesh: closing a session leaves you attached to
       # another session rather than exiting tmux entirely.
       set -g detach-on-destroy off
+
+      # In the dev VM the forwarded secrets (ssh AcceptEnv) exist only in
+      # each ssh session's environment; the long-lived tmux server keeps
+      # whatever the first connection carried. Refreshing these on every
+      # attach means panes created after a re-attach see current values
+      # instead of the boot-time copies. No-op on hosts, where the tokens
+      # come from /run/secrets reads in bashrc anyway.
+      set -ga update-environment "GH_TOKEN NIX_CONFIG BENCHER_API_KEY AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY"
 
       # Catppuccin status line modules. These reference @catppuccin_status_*
       # options that catppuccin.tmux populates when it runs, so these lines
@@ -500,9 +665,19 @@
       set -g status-left ""
       set -g status-right "#{E:@catppuccin_status_application}"
       set -agF status-right "#{E:@catppuccin_status_session}"
+      # Re-append continuum's autosave trigger: the plugin injects it into
+      # status-right at load time, which the plain `set -g status-right`
+      # above wipes (this block runs after all plugin run-shells). Without
+      # it the save-interval timer never fires and resurrect state — and
+      # the assistant-resurrect session hooks with it — only updates on a
+      # manual prefix+C-s. The script prints nothing, so the bar is
+      # unchanged visually.
+      set -ag status-right "#(${pkgs.tmuxPlugins.continuum}/share/tmux-plugins/continuum/scripts/continuum_save.sh)"
 
-      set -g @continuum-restore 'on'
-      set -g @continuum-save-interval '5'
+      # @continuum-restore / @continuum-save-interval are set in continuum's
+      # per-plugin extraConfig above (they must precede its run-shell — see
+      # the note there); this block only re-adds the save trigger to
+      # status-right after catppuccin overwrote it.
 
       # tmux-assistant-resurrect: persist AI-assistant sessions across restarts.
       # The post-save hook records each pane's Claude session id (via the
@@ -511,8 +686,16 @@
       # relaunches `claude --resume <id>` in each restored pane. Assistants are
       # deliberately kept OUT of @resurrect-processes — the hooks own resuming,
       # and listing them there would instead start a bare session-less claude.
-      set -g @resurrect-hook-post-save-all "bash '${inputs.tmux-assistant-resurrect}/scripts/save-assistant-sessions.sh'"
-      set -g @resurrect-hook-post-restore-all "bash '${inputs.tmux-assistant-resurrect}/scripts/restore-assistant-sessions.sh'"
+      set -g @resurrect-hook-post-save-all "bash '${tmux-assistant-resurrect-scripts}/scripts/save-assistant-sessions.sh'"
+      set -g @resurrect-hook-post-restore-all "bash '${tmux-assistant-resurrect-scripts}/scripts/restore-assistant-sessions.sh'"
+
+      # The post-restore hook above is continuum's intended path for resuming
+      # claude, but it fires client-less during boot restore and silently
+      # no-ops there (verified). Resume on the first client attach instead —
+      # layout already restored, a client finally present — via the guarded
+      # claude-resume-boot wrapper (base.nix packages). run-shell -b so the
+      # ~2s scan doesn't block the attach.
+      set-hook -g client-attached 'run-shell -b claude-resume-boot'
     '';
   };
 

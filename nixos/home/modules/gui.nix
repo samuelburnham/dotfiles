@@ -28,10 +28,14 @@
   home.packages =
     with pkgs;
     [
-      # Sourced from nixpkgs-unstable: stable's bitwarden-desktop pins EOL
-      # electron_39, which 26.05 marks insecure. The pinned unstable predates
-      # that EOL marking, so its build isn't refused.
-      pkgs-unstable.bitwarden-desktop
+      # Disabled: both channels currently pin bitwarden-desktop to EOL
+      # electron_39, which nixpkgs refuses as insecure. The Firefox
+      # extension covers day-to-day use (see the extension-popup window
+      # rule in hyprland.nix). To re-enable once upstream re-pins to a
+      # supported Electron, uncomment — and if it's still on an EOL
+      # electron, add that version to permittedInsecurePackages on the
+      # pkgs-unstable import in flake.nix.
+      # pkgs-unstable.bitwarden-desktop
       vscode
       # Sourced from nixpkgs-master: stable/unstable zulip still build with the
       # EOL-flagged pnpm_10_29_2; master's 5.12.4 moved to pnpm_11, avoiding the
@@ -84,13 +88,20 @@
         # opts in, and only to the RO pair, via the per-invocation SendEnv.
         export AWS_ACCESS_KEY_ID="$(cat /run/secrets/aws-access-key-id-ro 2>/dev/null)"
         export AWS_SECRET_ACCESS_KEY="$(cat /run/secrets/aws-secret-access-key-ro 2>/dev/null)"
-        # No explicit command: open an interactive login shell starting in
-        # ~/repos (the shared work tree) rather than the VM home. ssh lands
-        # in $HOME by default, so cd before exec'ing the login shell.
+        # No explicit command: land in tmux, always — tmux-resume (base.nix)
+        # attaches to the running server's most-recent session, or on a fresh
+        # boot starts the server (firing continuum's restore) and reattaches
+        # the session that was active before the last shutdown, falling back
+        # to a fresh ~/repos session only when there's nothing to restore. A
+        # Super+T window is therefore never a bare shell, so there's no "am I
+        # in tmux?" ambiguity. Detaching falls through to a plain login shell
+        # in ~/repos (debugging the tmux/sesh layer itself from inside the
+        # window); exiting that shell ends the ssh session and the ghostty
+        # window with it.
         if [ "$#" -eq 0 ]; then
           exec ${pkgs.openssh}/bin/ssh \
             -o SendEnv=AWS_ACCESS_KEY_ID -o SendEnv=AWS_SECRET_ACCESS_KEY \
-            -t dev-vm 'cd repos 2>/dev/null; exec "$SHELL" -l'
+            -t dev-vm 'cd repos 2>/dev/null; "$SHELL" -lc tmux-resume; exec "$SHELL" -l'
         fi
         exec ${pkgs.openssh}/bin/ssh \
           -o SendEnv=AWS_ACCESS_KEY_ID -o SendEnv=AWS_SECRET_ACCESS_KEY \
@@ -99,8 +110,8 @@
     ];
 
   # App-launcher entry: opens host ghostty already ssh'd into the dev
-  # microvm, so launching it drops straight into the VM shell. Plain
-  # ghostty (no args) stays the host-native terminal.
+  # microvm, dropping straight into the VM's tmux. Plain ghostty (no
+  # args) stays the host-native terminal.
   xdg.desktopEntries.ghostty-dev = {
     name = "Ghostty (dev VM)";
     genericName = "Terminal";

@@ -90,6 +90,21 @@ in
     ];
   };
 
+  # The hypridle idle-suspend hook (running in the user session) stops this VM
+  # before suspending so its ~48 GiB of shmem-backed RAM is freed first —
+  # otherwise amdgpu's VRAM eviction on S3 fails and the GPU resumes dark.
+  # Managing a system unit from an unprivileged session needs this grant,
+  # scoped to just this unit and this user.
+  security.polkit.extraConfig = ''
+    polkit.addRule(function(action, subject) {
+      if (action.id == "org.freedesktop.systemd1.manage-units" &&
+          action.lookup("unit") == "microvm@${vmName}.service" &&
+          subject.user == "${username}") {
+        return polkit.Result.YES;
+      }
+    });
+  '';
+
   microvm.vms.${vmName} =
     let
       system = "x86_64-linux";
@@ -107,7 +122,9 @@ in
       # generation when you're ready with `systemctl restart microvm@dev`: the
       # boot is a few seconds (the cloud-hypervisor vsock notify stall is fixed
       # by microvm PR #493) and it re-registers the new closure into the guest
-      # Nix DB from regInfo. home.img and the ~/repos share survive the restart.
+      # Nix DB from regInfo. home.img, the ~/repos share, and the persistent
+      # Nix DB (nix-var.img) all survive the restart — so the first devshell
+      # entry after a restart no longer pays a full closure re-registration.
       restartIfChanged = false;
 
       # null → microvm instantiates the guest's package set from its own
@@ -160,16 +177,16 @@ in
             # microvm@dev unit lets host UI processes outbid VM threads when
             # both compete.
             vcpu = 24;
-            # Ceiling, not a reservation — KVM only backs pages the guest
-            # actually dirties, so this costs nothing when the VM is idle.
-            # 56 GiB of the host's ~61 GiB usable, leaving ~5 GiB floor for the
-            # compositor, the cloud-hypervisor process itself, and a light
-            # browser. balloon + free-page-reporting return unused VM RAM to
-            # the host under pressure; the 16 GiB host swapfile cushions the
-            # case where the VM holds most of it (heavy ZK proving) while host
-            # apps also want memory.
-            mem = 57344;
-            balloon = true;
+            # Flat allocation, no balloon: 48 GiB of the 64 GiB installed.
+            # KVM backs pages lazily, but guest page cache pins host memory
+            # once dirtied, so treat the ceiling as eventually-resident. The
+            # guest must never be swapped by the host — that invalidates
+            # benchmark numbers, and the reclaim thrash can starve the
+            # compositor's input thread until the pointer wedges. What
+            # remains (~14 GiB usable) keeps Hyprland, cloud-hypervisor
+            # itself, and a heavy browser resident without touching the
+            # 16 GiB swapfile, which is an emergency lane only.
+            mem = 49152;
 
             # CID 2 is the host; 3 is the first guest.
             vsock.cid = 3;
@@ -233,18 +250,42 @@ in
                 # itself does; no manual stop/start of microvm@dev needed:
                 #   rm /var/lib/microvms/dev/nix-store-overlay.img
                 #   nixos-rebuild switch --flake ~/repos/dotfiles/nixos#nixos
+                # After this the persistent Nix DB (nix-var.img) still references
+                # the deleted upper-layer paths; the nix-db-selfheal service
+                # prunes them on the next boot (or `rm nix-var.img` too for a
+                # clean slate).
                 image = "nix-store-overlay.img";
                 mountPoint = "/nix/.rw-store";
-                size = 96 * 1024;
+                size = 256 * 1024;
               }
               {
                 # Persistent VM home — all home state (cargo, claude, tmux,
                 # direnv, history, caches) survives reboots here. ~/repos is
                 # virtiofs-mounted over the top from the host. Sparse image
-                # (truncate), so the 64G is a ceiling, not upfront usage.
+                # (truncate), so the size is a ceiling, not upfront usage.
                 image = "home.img";
                 mountPoint = "/home";
-                size = 64 * 1024;
+                size = 128 * 1024;
+              }
+              {
+                # Persistent Nix DB. Off the tmpfs root so the SQLite validity
+                # DB survives restarts — otherwise each restart wipes it and the
+                # first `nix develop` re-registers the whole devshell closure (a
+                # ~1-min stall), because the boot-time regInfo covers only the
+                # system closure while the overlay upper layer holds tens of
+                # thousands of built paths. Persisting the DB keeps it consistent
+                # with the already-persistent overlay it describes. The neededForBoot
+                # promotion below makes this a stage-1 mount, present before
+                # postBootCommands' `nix-store --load-db`, which creates the
+                # /nix/var/nix skeleton itself (LocalStore init) — so a fresh
+                # image needs no seeding. Sparse; the DB is tens of MB. This is
+                # NOT an upstream-supported pattern: microvm's docs treat the
+                # DB-forgets-on-reboot behaviour as unsolved and suggest wiping
+                # the overlay each boot instead, which would defeat the build
+                # cache — hence the self-heal service below covers the edge cases.
+                image = "nix-var.img";
+                mountPoint = "/nix/var";
+                size = 2 * 1024;
               }
             ];
 
@@ -265,6 +306,14 @@ in
               ${pkgs.iproute2}/bin/ip link set dev 'vm-${vmName}' master '${bridgeIface}'
             '';
           };
+
+          # microvm only marks the store-overlay volume neededForBoot; /nix/var
+          # (the persistent Nix DB volume above) must also mount in stage-1 so
+          # the boot-time `nix-store --load-db` lands on the persistent volume
+          # rather than the tmpfs root it would otherwise shadow — otherwise the
+          # system-closure registration is hidden and /run/current-system reads
+          # as unregistered on the persistent DB.
+          fileSystems."/nix/var".neededForBoot = true;
 
           users.users.${username} = {
             isNormalUser = true;
@@ -320,6 +369,24 @@ in
             automatic = true;
             dates = "weekly";
             options = "--delete-older-than 14d --option keep-outputs true --option keep-derivations true";
+          };
+
+          # The persistent Nix DB above can outlive a store path only after a
+          # deliberate host `nix-collect-garbage` or an overlay-image reset: the
+          # guest's own GC updates this DB in lockstep, and the host runs no
+          # automatic GC. Prune any such orphaned entry so nix re-realises the
+          # path on next use instead of erroring on a valid-but-missing path.
+          # Stat-only: no --check-contents (no re-hashing) and no --repair (no
+          # rebuild). Runs after the daemon so it never gates shell readiness —
+          # the heal window only matters right after one of those rare events.
+          systemd.services.nix-db-selfheal = {
+            description = "Prune Nix DB entries whose store paths vanished";
+            after = [ "nix-daemon.service" ];
+            wantedBy = [ "multi-user.target" ];
+            serviceConfig = {
+              Type = "oneshot";
+              ExecStart = "${config.nix.package.out}/bin/nix-store --verify";
+            };
           };
 
           # GH_TOKEN (gh api), NIX_CONFIG (private flake-input access-tokens),

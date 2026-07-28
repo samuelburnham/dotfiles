@@ -296,6 +296,20 @@
           -- without waiting for auto-dark-mode's 3-second poll interval.
           vim.api.nvim_create_user_command('DarkMode',  function() apply('mocha') end, {})
           vim.api.nvim_create_user_command('LightMode', function() apply('latte') end, {})
+          -- A headless VM has no desktop portal for auto-dark-mode's D-Bus
+          -- probe, so inside tmux seed the initial flavour from tmux's
+          -- #{client_theme}, which tmux derives from the terminal's OSC 2031
+          -- light/dark reports (Ghostty emits them; they survive the ssh hop).
+          -- Live changes arrive via the client-{dark,light}-theme tmux hooks
+          -- (dev-vm.nix) driving the DarkMode/LightMode commands above.
+          vim.api.nvim_create_autocmd('VimEnter', {
+            once = true,
+            callback = function()
+              if not vim.env.TMUX then return end
+              local t = vim.trim(vim.fn.system({ 'tmux', 'display-message', '-p', '#{client_theme}' }))
+              if t == 'light' then apply('latte') elseif t == 'dark' then apply('mocha') end
+            end,
+          })
         '';
       };
       # Enables loading rust-analyzer after direnv completes for Rust files in another directory
@@ -939,6 +953,13 @@
       lightbulb.enable = false;
       #lspSignature.enable = true;
       lspkind.enable = true;
+      # nil (the Nix LSP, started by languages.nix.lsp) prompts on every
+      # .nix buffer whose flake inputs aren't in the store yet — "… not
+      # available. Fetch them now?". autoArchive runs `nix flake archive`
+      # to fetch them automatically instead of asking each time. The nested
+      # key is servers.<lsp>.settings.<lsp-config-section>.…, so `nil.nil`
+      # is the server name followed by nil's own config section.
+      servers.nil.settings.nil.nix.flake.autoArchive = true;
       #mappings = {
       #
       #};

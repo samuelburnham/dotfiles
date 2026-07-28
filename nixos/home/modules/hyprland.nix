@@ -64,10 +64,14 @@ let
   # XDG_SCREENSHOTS_DIR and hardcodes a `_hyprshot` suffix), then claims
   # the clipboard with a file:// URI on text/uri-list — the MIME that
   # Firefox / Zulip / Telegram / image editors / file managers all
-  # accept and render as the image on paste. wl-copy runs in a transient
-  # user-service unit so it survives Hyprland's exec dispatcher tearing
-  # down children. The notification's "Open folder" action selects the
-  # file in Nautilus.
+  # accept and render as the image on paste. Both the wl-copy and the
+  # notify-send run in transient user-service units so they survive
+  # Hyprland's exec dispatcher (and Waybar's on-click) tearing down
+  # children. The notification needs this specifically because its "Open
+  # folder" action makes notify-send block on the swaync client
+  # connection until dismissed; if that child is reaped, swaync withdraws
+  # the notification and nothing is shown. The action selects the file in
+  # Nautilus.
   hyprshotCmd = pkgs.writeShellScript "hyprshot-cmd" ''
     dir=''${XDG_SCREENSHOTS_DIR:-$HOME/Pictures/Screenshots}
     filename="Screenshot From $(date +'%Y-%m-%d %H-%M-%S').png"
@@ -82,13 +86,15 @@ let
       'printf "file://%s\r\n" "$1" | ${pkgs.wl-clipboard}/bin/wl-copy --foreground --type text/uri-list' \
       wl-copy "$fullpath"
 
-    (
-      action=$(${pkgs.libnotify}/bin/notify-send \
-        -a Hyprshot -i "$fullpath" \
-        -A open="Open folder" \
-        "Screenshot saved" "$fullpath" 2>/dev/null)
-      [ "$action" = open ] && exec ${pkgs.nautilus}/bin/nautilus --select "$fullpath"
-    ) &
+    ${pkgs.systemd}/bin/systemd-run --user --collect --quiet --no-block \
+      --setenv=WAYLAND_DISPLAY --setenv=XDG_RUNTIME_DIR --setenv=DBUS_SESSION_BUS_ADDRESS \
+      ${pkgs.bash}/bin/bash -c '
+        action=$(${pkgs.libnotify}/bin/notify-send \
+          -a Hyprshot -i "$1" \
+          -A open="Open folder" \
+          "Screenshot saved" "$1" 2>/dev/null)
+        [ "$action" = open ] && exec ${pkgs.nautilus}/bin/nautilus --select "$1"
+      ' notify-send "$fullpath"
   '';
 
   # Convert a file:// URI clipboard (GTK4 apps — Loupe, Nautilus — put
@@ -265,6 +271,30 @@ let
       "$effpct" "$mem" "$cls" "$effpct" "$rawpct" "$effavailg" "$swapused" "$swaptot"
   '';
 
+  # Host terminal that opens in the directory of the dev VM's active tmux
+  # pane (Super+Shift+T). ~/repos is the same virtiofs tree on both sides,
+  # so the path translates 1:1 — the main use is pushing: the write-capable
+  # SSH key exists only on the host, so `git push` always happens in a host
+  # shell, and this drops that shell straight into the repo/worktree being
+  # worked on.
+  #
+  # The tmux query MUST run through a login shell (`$SHELL -lc`), like the
+  # ssh-dev-vm wrapper does. tmux's socket lives under $TMUX_TMPDIR
+  # (home-manager's secureSocket points it at XDG_RUNTIME_DIR, /run/user/UID),
+  # and only a login shell exports that. A bare `ssh dev-vm 'tmux ...'` runs
+  # non-login with TMUX_TMPDIR unset, so tmux looks at the default
+  # /tmp/tmux-UID socket, finds no server, and the dir comes back empty.
+  # Falls back to the ghostty default (~/repos) when the VM is down, nothing
+  # is attached, or the pane path is VM-only (outside the shared ~/repos).
+  ghosttyVmCwd = pkgs.writeShellScript "ghostty-vm-cwd" ''
+    dir=$(${pkgs.openssh}/bin/ssh -o BatchMode=yes -o ConnectTimeout=2 \
+      dev-vm '"$SHELL" -lc "tmux display -p \"#{pane_current_path}\""' 2>/dev/null)
+    if [ -n "$dir" ] && [ -d "$dir" ]; then
+      exec ghostty --working-directory="$dir"
+    fi
+    exec ghostty
+  '';
+
   # Idle auto-suspend with a runtime opt-out. hypridle's final listener runs
   # `suspendUnlessInhibited`, which suspends only when the flag file is
   # absent; the Waybar pill flips that flag via `toggleSuspendInhibit`.
@@ -278,6 +308,16 @@ let
   # auto-suspend is re-armed by default each session.
   suspendUnlessInhibited = pkgs.writeShellScript "hypridle-suspend-unless-inhibited" ''
     [ -e "''${XDG_RUNTIME_DIR:-/tmp}/hypridle-suspend-inhibited" ] && exit 0
+    # Stop the dev microvm before suspending. It pins up to 48 GiB of
+    # virtiofs-shared, shmem-backed host RAM; amdgpu evicts VRAM into system
+    # RAM on S3 suspend with GFP_NOIO, which can't reclaim shmem, so a full VM
+    # makes the suspend abort and the GPU resume to a dark display. Freeing the
+    # RAM first lets the suspend complete. No-op (and privilege-free) when the
+    # unit isn't running, e.g. on hosts without the VM. A managed system unit
+    # needs the polkit grant in hosts/desktop/microvm.nix.
+    if ${pkgs.systemd}/bin/systemctl is-active --quiet microvm@dev.service; then
+      ${pkgs.systemd}/bin/systemctl stop microvm@dev.service
+    fi
     exec ${pkgs.systemd}/bin/systemctl suspend
   '';
   toggleSuspendInhibit = pkgs.writeShellScript "hypridle-toggle-suspend" ''
@@ -285,7 +325,7 @@ let
     if [ -e "$flag" ]; then
       rm -f "$flag"
       ${pkgs.libnotify}/bin/notify-send -a hypridle -t 2000 \
-        "Auto-suspend on" "Suspends after 15 min idle"
+        "Auto-suspend on" "Suspends after 30 min idle"
     else
       : > "$flag"
       ${pkgs.libnotify}/bin/notify-send -a hypridle -t 2000 \
@@ -299,7 +339,7 @@ let
     if [ -e "''${XDG_RUNTIME_DIR:-/tmp}/hypridle-suspend-inhibited" ]; then
       printf '{"text":"%s","class":"active","tooltip":"Auto-suspend OFF — machine stays awake when idle (display still locks + powers off).\\nClick to re-arm suspend."}\n' "$bolt"
     else
-      printf '{"text":"%s","class":"normal","tooltip":"Auto-suspend ON — suspends after 15 min idle.\\nClick to keep awake for a remote session."}\n' "$bed"
+      printf '{"text":"%s","class":"normal","tooltip":"Auto-suspend ON — suspends after 30 min idle.\\nClick to keep awake for a remote session."}\n' "$bed"
     fi
   '';
 
@@ -806,9 +846,10 @@ in
       -- screenshot/clipboard scripts) stay direct children — they exit
       -- before unit placement matters.
       --
-      -- Super+T opens ghostty already ssh'd into the dev microvm (via the
-      -- ssh-dev-vm wrapper, which forwards GH_TOKEN/NIX_CONFIG).
-      -- Super+Shift+T (below) opens a plain host ghostty.
+      -- Super+T opens ghostty ssh'd into the dev microvm and attached to
+      -- tmux (via the ssh-dev-vm wrapper, which forwards
+      -- GH_TOKEN/NIX_CONFIG). Super+Shift+T (below) opens a plain host
+      -- ghostty.
       local terminal    = "uwsm app -- ghostty -e ssh-dev-vm"
       local fileManager = "uwsm app -- nautilus"
       local menu        = "uwsm app -- fuzzel"
@@ -897,8 +938,11 @@ in
       hl.bind(mod .. " + C", hl.dsp.exec_cmd("hyprpicker -a -f hex"))
       hl.bind(mod .. " + SHIFT + D", hl.dsp.exec_cmd("darkman toggle"))
       hl.bind(mod .. " + T", hl.dsp.exec_cmd(terminal))
-      -- Plain host ghostty — not tied to the VM.
-      hl.bind(mod .. " + SHIFT + T", hl.dsp.exec_cmd("uwsm app -- ghostty"))
+      -- Host ghostty, opened in the dev VM's active tmux pane directory
+      -- (or ~/repos when the VM is down) — the push terminal: the
+      -- write-capable SSH key lives only on the host, so git push happens
+      -- here, already cd'd to the repo being worked on in the VM.
+      hl.bind(mod .. " + SHIFT + T", hl.dsp.exec_cmd("uwsm app -- ${ghosttyVmCwd}"))
 
       -- Escape-hatch terminal, deliberately NOT uwsm-wrapped: if `uwsm app`
       -- is ever broken every wrapped bind above is dead, and this raw
@@ -1819,11 +1863,11 @@ in
           on-timeout = "loginctl lock-session";
         }
         {
-          # Final step: suspend after 15 min idle (GNOME-style), unless the
-          # Waybar suspend pill has armed the inhibit flag — see
-          # suspendUnlessInhibited. before_sleep_cmd locks first, so it
-          # always resumes to a lock screen.
-          timeout = 900;
+          # Final step: suspend after 30 min idle, unless the Waybar suspend
+          # pill has armed the inhibit flag — see suspendUnlessInhibited.
+          # before_sleep_cmd locks first, so it always resumes to a lock
+          # screen.
+          timeout = 1800;
           on-timeout = "${suspendUnlessInhibited}";
         }
       ];

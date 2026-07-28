@@ -25,34 +25,45 @@
   # creates a dedicated tmux session for it and drops the current client
   # into it. `wt remove` / `wt merge` reverse the whole thing.
   home.file.".config/worktrunk/config.toml".text = ''
-    [pre-start]
+    # Array-of-tables (`[[pre-start]]`) runs steps serially, in order.
+    # worktrunk deprecated the named-key table form (`[pre-start]` with
+    # `tmux`/`direnv` keys) — it warns on every `wt` invocation and will
+    # flip that form's execution from serial to parallel. `[[pre-start]]`
+    # blocks pin the serial ordering: create the session first, then
+    # direnv-allow the worktree it lives in.
+    [[pre-start]]
     tmux = """
-    # Worktrunk's default template creates sibling worktrees as
-    # `<repo>.<branch>`, so basename yields e.g. `dotfiles.test`. tmux's
-    # target-spec grammar always parses `.` as a `session.pane`
-    # separator — even inside a `=exact` prefix — which is unfixable at
-    # lookup time. Strip dots at the source so creation and lookup both
-    # see a bare session name. `tr . -` also covers dotted branch names
-    # like `v1.2.3`; worktrunk only sanitizes slashes, not dots.
-    S=$(basename "{{ worktree_path }}" | tr . -)
-    tmux new-session -d -s "$S" -c "{{ worktree_path }}"
-    # Guarded on $TMUX so calls from outside tmux are a no-op instead
-    # of erroring on "no current client".
-    [ -n "$TMUX" ] && tmux switch-client -t "=$S"
+    # Delegate session creation to sesh (base.nix) rather than a raw
+    # `tmux new-session`, so worktree sessions get the same treatment as
+    # every other session here: sesh's git-aware namer (which maps `.`
+    # and `:` to `_`, so a `dotfiles.test` worktree becomes the
+    # tmux-safe `dotfiles_test`), zoxide registration, and any
+    # configured startup command. sesh switches the client when $TMUX is
+    # set and attaches otherwise, so no explicit switch-client is needed.
+    sesh connect "{{ worktree_path }}"
     """
+
+    [[pre-start]]
     # Guarded on .envrc presence so worktrees in non-direnv repos don't
     # error. `direnv allow` accepts a path and resolves the .envrc itself.
     direnv = """
     [ -f "{{ worktree_path }}/.envrc" ] && direnv allow "{{ worktree_path }}" || true
     """
 
-    [pre-remove]
+    # Session teardown runs post-remove, not pre-remove: `wt remove`'s
+    # default background path renames the worktree into `.git/wt/trash/`,
+    # prunes metadata and deletes the branch synchronously, then spawns a
+    # detached `rm -rf` to delete the files. A pre-remove `kill-session`
+    # tears down the very session `wt remove` runs in, SIGHUPing `wt`
+    # after the prune but before it spawns that `rm` — so the branch and
+    # session vanish while the directory survives in trash. post-remove
+    # hooks run detached after the `rm` is already spawned, so the delete
+    # completes first and the session dies last.
+    [post-remove]
     tmux = """
-    # Must match pre-start's transform so we target the session that
-    # was actually created. Error-swallow preserved: kill-session is a
-    # no-op if the session doesn't exist, and we don't want `wt remove`
-    # to fail on cleanup of a missing session.
-    S=$(basename "{{ worktree_path }}" | tr . -)
+    # Must match the name sesh generated in pre-start: its default namer
+    # is the basename with `.` and `:` mapped to `_`.
+    S=$(basename "{{ worktree_path }}" | tr '.:' '_')
     tmux kill-session -t "=$S" 2>/dev/null || true
     """
 
