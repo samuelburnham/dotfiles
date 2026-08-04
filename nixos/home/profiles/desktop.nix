@@ -24,6 +24,9 @@
     # careful despite the host's real ~/.config / secrets access — see the
     # security note in that file.
     ../modules/claude.nix
+    # worktrunk drives worktree-based dev on the workstation too; it shells
+    # out to the claude above for commit messages.
+    ../modules/worktrunk.nix
   ];
 
   # direnv and git hooks auto-run repo-local files (.envrc and its devshell;

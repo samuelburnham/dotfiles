@@ -9,6 +9,12 @@
     ../modules/base.nix
     ../modules/alias.nix
     ../modules/gnome.nix
+    # The laptop is a daily driver where claude runs directly against real
+    # repos, so it carries claude.nix (prompting default + bubblewrap sandbox
+    # kept, same as the desktop host) and worktrunk, which shells out to claude
+    # for commit messages.
+    ../modules/claude.nix
+    ../modules/worktrunk.nix
   ];
 
   home.packages = with pkgs; [

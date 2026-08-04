@@ -1,8 +1,8 @@
 # worktrunk — git worktree switcher whose commit generation shells out to
-# `claude` (see claude.nix). Kept out of base.nix so it stays off the
-# bare-metal workstations: worktree-based dev (and the claude it needs for
-# commit messages) happens only in the isolated environments. Imported by the
-# dev microvm (dev-vm.nix) and the Ubuntu box (ubuntu.nix), alongside claude.nix.
+# `claude` (see claude.nix). Kept out of base.nix so it's imported per profile
+# rather than baked into every closure. Imported alongside claude.nix by the
+# bare-metal workstations (desktop.nix, laptop.nix) and the isolated
+# environments (dev-vm.nix, the Ubuntu box).
 {
   inputs,
   ...

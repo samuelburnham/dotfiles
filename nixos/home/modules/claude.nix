@@ -3,12 +3,13 @@
 # where it's wanted, so it isn't in every closure by default:
 #   - the disposable/isolated environments — the dev microvm (dev-vm.nix)
 #     and the Ubuntu cloud box (ubuntu.nix) — which default to "auto" mode;
-#   - the desktop host (desktop.nix), for debugging the host-side
-#     Hyprland/waybar setup the dev VM can't see.
-# The desktop is the one host with the real ~/.config, /run/secrets, and
-# host services in reach, so it deliberately keeps the prompting
+#   - the bare-metal workstations (desktop.nix, laptop.nix), where claude
+#     runs directly against real repos — and, on the desktop, debugs the
+#     host-side Hyprland/waybar setup the dev VM can't see.
+# The workstations are the hosts with the real ~/.config, /run/secrets, and
+# host services in reach, so they deliberately keep the prompting
 # `defaultMode` and the bubblewrap `sandbox` below — claude can't act
-# unattended there. The laptop carries no claude at all.
+# unattended there.
 {
   inputs,
   pkgs,

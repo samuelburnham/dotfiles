@@ -12,6 +12,10 @@
     # GNOME system-level options moved out of common/host.nix so each
     # host opts in to its own graphical environment.
     ../../common/gnome-de.nix
+    # Root-owned /etc/claude-code/managed-settings.json — the enforced deny
+    # policy for the host-side Claude (home/profiles/laptop.nix), which it
+    # can't edit as an unprivileged user.
+    ../../common/claude-managed-settings.nix
     ./hardware-configuration.nix
   ];
 
@@ -68,6 +72,9 @@
   # My laptop doesn't have a `/sys/class/power_supply/BAT*/charge_control_{start,end}_threshold`, so UPower isn't able to provide max charge as a Gnome power settings option. Could try adding support for my laptop to https://github.com/BeardOverflow/msi-ec or checking back in a few months
   # See https://vdwaa.nl/gnome-upower-charge-thresholds.html
   #services.upower.enable = true;
+
+  # Brother laser printer driver (same model as the desktop).
+  services.printing.drivers = [ pkgs.brlaser ];
 
   # Remap Caps Lock to Esc on tap, Ctrl on hold/chord
   # Not useful for Kinesis keyboard (desktop), but great for laptop keyboard
