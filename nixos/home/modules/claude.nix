@@ -53,10 +53,10 @@ in
     # .lsp.json) and refuses a null package. The module adds that wrapper to
     # home.packages itself, so it must not also be listed there by hand.
     package = pkgs-master.claude-code.overrideAttrs (old: rec {
-      version = "2.1.190";
+      version = "2.1.222";
       src = pkgs.fetchurl {
         url = "https://downloads.claude.ai/claude-code-releases/${version}/linux-x64/claude";
-        sha256 = "0684e28517cc785ab8d19feb5dad3381eab4abc97bf6fce07bc534dc88040b27";
+        sha256 = "10caae8f22b915c26bfff0e013a4d45608c4f1ae287583626569156f447730e5";
       };
     });
     settings = {
@@ -114,15 +114,12 @@ in
         defaultMode = lib.mkDefault "default";
         allow = [
           "Read(${config.home.homeDirectory}/repos/**)"
-          "Glob(${config.home.homeDirectory}/repos/**)"
           "Grep(${config.home.homeDirectory}/repos/**)"
           "Edit(${config.home.homeDirectory}/repos/**)"
           "Read(${config.home.homeDirectory}/.cargo/**)"
-          "Glob(${config.home.homeDirectory}/.cargo/**)"
           "Grep(${config.home.homeDirectory}/.cargo/**)"
           "Edit(${config.home.homeDirectory}/.cargo/**)"
           "Read(/nix/store/**)"
-          "Glob(/nix/store/**)"
           "Grep(/nix/store/**)"
           "Bash(cargo build:*)"
           "Bash(cargo check:*)"
@@ -164,7 +161,6 @@ in
           "WebFetch(domain:api.github.com)"
           "WebFetch(domain:index.crates.io)"
           "Read(/tmp/**)"
-          "Glob(/tmp/**)"
           "Grep(/tmp/**)"
         ];
         # Human-only actions (destroying/applying infra, driving cloud CLIs).

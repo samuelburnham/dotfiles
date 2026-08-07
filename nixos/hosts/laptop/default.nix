@@ -47,6 +47,11 @@
   boot.kernelParams = [
     "mem_sleep_default=s2idle"
     "resume_offset=14559232"
+    # The internal webcam (hardwired usb3-port5) fails to enumerate and the
+    # xHCI controller retries forever, storming ACPI GPE 0x89 (~80 SCIs/sec).
+    # That wedges a PM kworker and, critically, leaves the port "busy" so
+    # s2idle aborts on lid close. Masking the GPE stops the storm at boot.
+    "acpi_mask_gpe=0x89"
   ];
   # UUID of root ext4 partition
   boot.resumeDevice = "/dev/disk/by-uuid/e1746389-93c2-4f21-8086-f3b5e685413b";
@@ -59,7 +64,6 @@
   services.logind = {
     settings.Login = {
       HandleLidSwitch = "suspend-then-hibernate";
-      SuspendThenHibernate = "yes";
     };
   };
   # 15 minute time delay after suspend before hibernation

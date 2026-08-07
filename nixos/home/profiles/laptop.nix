@@ -1,5 +1,6 @@
 # sam@laptop — Intel, MSI
 {
+  lib,
   pkgs,
   gnomeBaseExtensions,
   ...
@@ -27,18 +28,31 @@
     gnomeExtensions.power-off-options
   ];
 
-  # GNOME: Set enabled-extensions for laptop (shared + laptop-specific)
+  # GNOME: Set enabled-extensions for laptop (shared + laptop-specific).
+  # pop-shell is dropped from the shared base here: its auto-tiler reflows any
+  # window mutter resizes, which cancels the <Super>a/d half-screen snap. The
+  # desktop's GNOME fallback still enables it, so the filter is host-local.
   dconf.settings = {
     "org/gnome/shell".enabled-extensions = map (e: e.extensionUuid) (
-      gnomeBaseExtensions
+      (lib.filter (
+        e: e.extensionUuid != pkgs.gnomeExtensions.pop-shell.extensionUuid
+      ) gnomeBaseExtensions)
       ++ (with pkgs.gnomeExtensions; [
         auto-power-profile
         power-off-options
       ])
     );
-    # Laptop-specific keybind
+    # Laptop-specific keybind, plus the four binds gnome.nix blanks to make
+    # room for pop-shell's focus/monitor keys — restored to GNOME's own
+    # defaults now that nothing consumes them here.
     "org/gnome/desktop/wm/keybindings" = {
       close = [ "<Shift><Control>w" ];
+      minimize = lib.mkForce [ "<Super>h" ];
+      move-to-monitor-up = lib.mkForce [ "<Super><Shift>Up" ];
+      move-to-monitor-down = lib.mkForce [ "<Super><Shift>Down" ];
+    };
+    "org/gnome/settings-daemon/plugins/media-keys" = {
+      screensaver = lib.mkForce [ "<Super>l" ];
     };
     "org/gnome/desktop/notifications/application/spotify" = {
       enable = false;

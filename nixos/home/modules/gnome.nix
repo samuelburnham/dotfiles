@@ -100,11 +100,11 @@ in
       "org/gnome/shell/keybindings" = {
         toggle-application-view = [ "<Super>Tab" ];
       };
-      # Cleared so <Super>Left/Right reach switch-to-workspace-left/right
-      # instead of mutter's half-screen snap (the default).
+      # Mutter's half-screen snap, moved off its <Super>Left/Right default so
+      # those reach switch-to-workspace-left/right above.
       "org/gnome/mutter/keybindings" = {
-        toggle-tiled-left = [ ];
-        toggle-tiled-right = [ ];
+        toggle-tiled-left = [ "<Super>a" ];
+        toggle-tiled-right = [ "<Super>d" ];
       };
       "org/gnome/mutter" = {
         dynamic-workspaces = false;
