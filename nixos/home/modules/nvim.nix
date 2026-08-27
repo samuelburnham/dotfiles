@@ -606,6 +606,12 @@
     globals.mapleader = " ";
     keymaps = [
       {
+        key = "x";
+        mode = [ "n" ];
+        action = "\"_x";
+        desc = "Delete character without copying";
+      }
+      {
         key = "k";
         mode = [
           "n"

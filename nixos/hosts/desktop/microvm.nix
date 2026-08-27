@@ -90,19 +90,45 @@ in
     ];
   };
 
-  # The hypridle idle-suspend hook (running in the user session) stops this VM
-  # before suspending so its ~48 GiB of shmem-backed RAM is freed first —
-  # otherwise amdgpu's VRAM eviction on S3 fails and the GPU resumes dark.
-  # Managing a system unit from an unprivileged session needs this grant,
-  # scoped to just this unit and this user.
-  security.polkit.extraConfig = ''
-    polkit.addRule(function(action, subject) {
-      if (action.id == "org.freedesktop.systemd1.manage-units" &&
-          action.lookup("unit") == "microvm@${vmName}.service" &&
-          subject.user == "${username}") {
-        return polkit.Result.YES;
-      }
-    });
+  # This VM pins up to 48 GiB of host RAM as shmem (cloud-hypervisor backs
+  # guest memory with a memfd so virtiofsd can map it). On S3 entry amdgpu
+  # evicts VRAM into system RAM under GFP_NOIO, which may not start I/O and
+  # therefore cannot swap shmem out to make room; with the VM up, that
+  # allocation lands below the free-page watermark and fails:
+  #
+  #   [TTM] Buffer eviction failed
+  #   amdgpu: evicting device resources failed
+  #
+  # The suspend then aborts after the console is already suspended and the
+  # display DPMS-off, so the machine sits awake with a dark screen and the fans
+  # ramping. Stopping the VM first is what makes suspend work at all, so it has
+  # to happen on every entry point (wlogout, hypridle, loginctl, hibernate) —
+  # hence a sleep hook rather than anything session-side.
+  #
+  # sleep-actions.service is ordered Before=sleep.target, so the stop below
+  # completes — memory genuinely returned — before the kernel suspends. The
+  # `is-active` probe and the stop have to sit in one sequential script: a
+  # declarative Conflicts=sleep.target on the unit would stop the VM
+  # concurrently with this script, and the probe would then race a unit already
+  # reading as "deactivating" and lose the state needed to restore it.
+  powerManagement.powerDownCommands = ''
+    if ${pkgs.systemd}/bin/systemctl is-active --quiet microvm@${vmName}.service; then
+      ${pkgs.coreutils}/bin/touch /run/microvm-${vmName}-restore
+      ${pkgs.systemd}/bin/systemctl stop microvm@${vmName}.service
+    fi
+  '';
+
+  # Bring it back on resume, but only when the suspend is what took it down —
+  # a VM stopped by hand to free RAM stays stopped. The flag lives on /run, so
+  # a crash between the two hooks resolves itself at the next boot.
+  #
+  # --no-block because microvm@ is Type=notify: a blocking start would hold the
+  # resume path until the guest finished booting and sent READY.
+  powerManagement.resumeCommands = ''
+    if [ -e /run/microvm-${vmName}-restore ]; then
+      ${pkgs.coreutils}/bin/rm -f /run/microvm-${vmName}-restore
+      ${pkgs.systemd}/bin/systemctl --no-block start microvm@${vmName}.service
+    fi
   '';
 
   microvm.vms.${vmName} =
@@ -256,7 +282,7 @@ in
                 # clean slate).
                 image = "nix-store-overlay.img";
                 mountPoint = "/nix/.rw-store";
-                size = 256 * 1024;
+                size = 512 * 1024;
               }
               {
                 # Persistent VM home — all home state (cargo, claude, tmux,
@@ -357,6 +383,8 @@ in
           # can reach it. The firewall would only block host→VM access to dev
           # servers (e.g. a web server on 0.0.0.0 reached from host Firefox).
           networking.firewall.enable = false;
+
+          nix.settings.build-dir = "/nix/.rw-store/builds";
 
           # Scheduled GC to bound the store overlay. The keep-outputs/
           # keep-derivations options are passed here rather than set globally,

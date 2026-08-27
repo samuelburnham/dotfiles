@@ -70,14 +70,13 @@
       # plain `vim` for git commit messages.
       inputs.self.packages.${pkgs.system}.nvim
 
-      # Connect to the dev microvm, forwarding the sops-decrypted tokens so
-      # `gh api` and private nix flake inputs work inside it. Reads the
-      # secrets explicitly (rather than relying on an interactive shell)
-      # so GUI launches — Hyprland keybind, app-launcher entry — carry them
-      # too; ssh's SendEnv (see desktop.nix) does the forwarding.
+      # Connect to the dev microvm, forwarding its scoped credentials without
+      # installing them in the ordinary host-shell environment. Assigning the
+      # variables unconditionally prevents ambient host values from crossing
+      # the boundary when a VM secret is unavailable.
       (pkgs.writeShellScriptBin "ssh-dev-vm" ''
-        [ -r /run/secrets/gh-token ] && export GH_TOKEN="$(cat /run/secrets/gh-token)"
-        [ -r /run/secrets/rendered/nix-access-tokens ] && export NIX_CONFIG="$(cat /run/secrets/rendered/nix-access-tokens)"
+        export GH_TOKEN="$(cat /run/secrets/gh-token 2>/dev/null)"
+        export NIX_CONFIG="$(cat /run/secrets/rendered/nix-access-tokens 2>/dev/null)"
         [ -r /run/secrets/bencher-key ] && export BENCHER_API_KEY="$(cat /run/secrets/bencher-key)"
         # Give the VM the READ-ONLY AWS pair only, never the host's write
         # creds. Set unconditionally with a fallback so a missing RO secret

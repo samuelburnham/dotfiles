@@ -27,6 +27,7 @@ in
     ../modules/base.nix
     ../modules/alias.nix
     ../modules/claude.nix
+    ../modules/codex.nix
     ../modules/worktrunk.nix
   ];
 

@@ -26,6 +26,7 @@
     # worktrunk drives worktree-based dev on the workstation too; it shells
     # out to the claude above for commit messages.
     ../modules/worktrunk.nix
+    ../modules/codex.nix
   ];
 
   # direnv and git hooks auto-run repo-local files (.envrc and its devshell;
@@ -52,10 +53,9 @@
       HostName = "vsock-mux/var/lib/microvms/dev/notify.vsock";
       User = "sam";
       ProxyCommand = "${pkgs.systemd}/lib/systemd/systemd-ssh-proxy %h %p";
-      # Forward the sops-decrypted tokens from the host session into the VM
-      # (sshd there accepts the same list via AcceptEnv). Only present when
-      # the launching shell has them — see the login-shell wrapper on the
-      # Super+T bind / launcher entry.
+      # Forward credentials that ssh-dev-vm defines for its child ssh process;
+      # ordinary host shells do not contain the VM's GitHub credentials.
+      # sshd in the VM accepts the same names via AcceptEnv.
       #
       # AWS_* is deliberately NOT here: the host's write creds live under
       # those names, and a plain `ssh dev-vm` must never forward them into the
@@ -79,7 +79,5 @@
 
   # GNOME: Set enabled-extensions for desktop (shared extensions only).
   # Inert under Hyprland — dconf state without gnome-shell to consume it.
-  dconf.settings."org/gnome/shell".enabled-extensions = map (
-    e: e.extensionUuid
-  ) gnomeBaseExtensions;
+  dconf.settings."org/gnome/shell".enabled-extensions = map (e: e.extensionUuid) gnomeBaseExtensions;
 }

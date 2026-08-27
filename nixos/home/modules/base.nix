@@ -14,6 +14,16 @@
   ...
 }:
 let
+  tmuxLatest = pkgs-unstable.tmux.overrideAttrs (_: {
+    version = "3.7c";
+    src = pkgs.fetchFromGitHub {
+      owner = "tmux";
+      repo = "tmux";
+      rev = "3.7c";
+      hash = "sha256-TpZXTeXKQv6MV1vAPu5MIT52d3Pl6dYcOReZa7QANZY=";
+    };
+  });
+
   # Patched copy of tmux-assistant-resurrect with two fixes for this setup.
   #
   # (1) plugin-dir accumulation: the claude launcher (claude.nix) always
@@ -305,20 +315,13 @@ in
     bashrcExtra = ''
       LS_COLORS=$(echo "$LS_COLORS" | sed 's/=00;90/=36;2/g')
       export PATH="$HOME/.cargo/bin:$PATH"
-      # sops-decrypted tokens, exported on hosts that hold the age key.
-      # GH_TOKEN drives `gh api`; NIX_CONFIG carries the access-tokens line
-      # for private flake inputs. The dev microvm has no key of its own and
-      # no secret files — `ssh dev-vm` forwards both from the host session
-      # (see SendEnv/AcceptEnv), so these reads simply no-op inside the VM.
-      [ -r /run/secrets/gh-token ] && export GH_TOKEN="$(cat /run/secrets/gh-token)"
-      [ -r /run/secrets/rendered/nix-access-tokens ] && export NIX_CONFIG="$(cat /run/secrets/rendered/nix-access-tokens)"
       # AWS write creds for Terraform / the aws CLI, exported on hosts that
       # hold the secret files. A no-op where they're absent (the ubuntu bench
       # box, the microvm); the dev microvm instead receives the read-only pair
       # as env vars forwarded by the ssh-dev-vm wrapper (see gui.nix).
       [ -r /run/secrets/aws-access-key-id ] && export AWS_ACCESS_KEY_ID="$(cat /run/secrets/aws-access-key-id)"
       [ -r /run/secrets/aws-secret-access-key ] && export AWS_SECRET_ACCESS_KEY="$(cat /run/secrets/aws-secret-access-key)"
-      # Bencher CLI API key — forwarded into the dev microvm like GH_TOKEN.
+      # Bencher CLI API key — also forwarded into the dev microvm.
       [ -r /run/secrets/bencher-key ] && export BENCHER_API_KEY="$(cat /run/secrets/bencher-key)"
       # GCP disabled for now — re-enable with the gcp-credentials secret in host.nix.
       # [ -r /run/secrets/gcp-credentials ] && export GOOGLE_APPLICATION_CREDENTIALS=/run/secrets/gcp-credentials
@@ -412,11 +415,11 @@ in
 
   programs.tmux = {
     enable = true;
-    # 3.7b from unstable (stable 26.05 ships 3.6a) for `command-prompt -e`
+    # 3.7c using unstable's package definition for `command-prompt -e`
     # (the prefix+W worktree prompt below): -e makes an empty entry cancel
     # instead of running the command with a blank argument. Shared by host
     # and VM alike since this is base.nix.
-    package = pkgs-unstable.tmux;
+    package = tmuxLatest;
     shortcut = "Space";
     mouse = true;
     terminal = "tmux-256color";
@@ -651,8 +654,8 @@ in
       # each ssh session's environment; the long-lived tmux server keeps
       # whatever the first connection carried. Refreshing these on every
       # attach means panes created after a re-attach see current values
-      # instead of the boot-time copies. No-op on hosts, where the tokens
-      # come from /run/secrets reads in bashrc anyway.
+      # instead of the boot-time copies. On hosts, attaching from a clean
+      # shell also removes stale GH_TOKEN/NIX_CONFIG values from the session.
       set -ga update-environment "GH_TOKEN NIX_CONFIG BENCHER_API_KEY AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY"
 
       # Catppuccin status line modules. These reference @catppuccin_status_*

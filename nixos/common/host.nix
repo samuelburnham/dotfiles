@@ -142,11 +142,9 @@
     age.keyFile = "/home/${username}/.config/sops/age/keys.txt";
 
     secrets = {
-      # Single source of truth for the GitHub PAT. gh-token holds the only
-      # copy; the nix access-tokens line is rendered from it by the template
-      # below, so the two can't drift (a separate nix-access-tokens secret
-      # used to carry a second copy of the same PAT and silently went stale
-      # on rotation). Read by the user's shell rc and exported as GH_TOKEN.
+      # Read-only GitHub PAT for the dev microvm. The host keeps the decrypted
+      # file solely so ssh-dev-vm can forward it; host shells and the host Nix
+      # daemon authenticate independently.
       gh-token = {
         mode = "0400";
         owner = username;
@@ -195,20 +193,13 @@
       # };
     };
 
-    # Renders `access-tokens = github.com=<PAT>` from gh-token at activation.
-    # owner = sam so the user shell can cat it to export NIX_CONFIG (forwarded
-    # into the dev microvm); the nix daemon reads it as root for the !include.
+    # Render the VM's Nix access-token setting without duplicating the PAT in
+    # secrets.yaml. Only ssh-dev-vm reads this file for forwarding.
     templates.nix-access-tokens = {
       content = "access-tokens = github.com=${config.sops.placeholder.gh-token}";
       owner = username;
     };
   };
-
-  # GitHub PAT for authenticated nix fetches — rendered at runtime by sops-nix
-  # from gh-token. Lets `github:org/name` flake inputs fetch private repos.
-  nix.extraOptions = ''
-    !include ${config.sops.templates.nix-access-tokens.path}
-  '';
 
   # List packages installed in system profile. To search, run:
   # $ nix search wget

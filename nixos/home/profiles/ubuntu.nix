@@ -10,6 +10,7 @@
   imports = [
     ../modules/base.nix
     ../modules/claude.nix
+    ../modules/codex.nix
     ../modules/worktrunk.nix
   ];
 

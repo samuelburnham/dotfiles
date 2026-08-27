@@ -308,16 +308,6 @@ let
   # auto-suspend is re-armed by default each session.
   suspendUnlessInhibited = pkgs.writeShellScript "hypridle-suspend-unless-inhibited" ''
     [ -e "''${XDG_RUNTIME_DIR:-/tmp}/hypridle-suspend-inhibited" ] && exit 0
-    # Stop the dev microvm before suspending. It pins up to 48 GiB of
-    # virtiofs-shared, shmem-backed host RAM; amdgpu evicts VRAM into system
-    # RAM on S3 suspend with GFP_NOIO, which can't reclaim shmem, so a full VM
-    # makes the suspend abort and the GPU resume to a dark display. Freeing the
-    # RAM first lets the suspend complete. No-op (and privilege-free) when the
-    # unit isn't running, e.g. on hosts without the VM. A managed system unit
-    # needs the polkit grant in hosts/desktop/microvm.nix.
-    if ${pkgs.systemd}/bin/systemctl is-active --quiet microvm@dev.service; then
-      ${pkgs.systemd}/bin/systemctl stop microvm@dev.service
-    fi
     exec ${pkgs.systemd}/bin/systemctl suspend
   '';
   toggleSuspendInhibit = pkgs.writeShellScript "hypridle-toggle-suspend" ''

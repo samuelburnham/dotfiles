@@ -83,6 +83,19 @@ in
     ACTION=="add", SUBSYSTEM=="usb", ATTRS{idVendor}=="29ea", ATTRS{idProduct}=="0362", ATTR{power/wakeup}="enabled"
   '';
 
+  # Logitech Bolt receiver (046d:c548). Without hid-logitech-hidpp the HID
+  # nodes fall back to hid-generic, which speaks no HID++, so the kernel
+  # cannot tell when a paired wireless device drops off the receiver: a
+  # sleeping or out-of-range mouse is indistinguishable from a live one.
+  # There is no disconnect event, the input node persists, and the pointer
+  # silently stops until the mouse is power-cycled. The driver also exposes
+  # charge level under /sys/class/power_supply, which is otherwise empty.
+  boot.kernelModules = [ "hid_logitech_hidpp" ];
+  hardware.logitech.wireless = {
+    enable = true;
+    enableGraphical = true;
+  };
+
   # DDC/CI brightness control for the DisplayPort monitors. A desktop panel
   # has no backlight sysfs, so brightness is driven over the monitor's I2C
   # channel with ddcutil (VCP feature 0x10). hardware.i2c.enable loads

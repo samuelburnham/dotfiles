@@ -12,13 +12,16 @@
 # unattended there.
 {
   inputs,
-  pkgs,
   pkgs-master,
   lib,
   config,
   ...
 }:
 let
+  # Tool-agnostic half of the context below; codex.nix appends to the same
+  # string, so shared rules are stated once instead of in each agent's copy.
+  sharedContext = import ./agent-context.nix;
+
   rustfmtHook = ''
     f=$(jq -r '.tool_input.file_path')
     if [ -z "$f" ] || [ "$f" = "null" ]; then exit 0; fi
@@ -83,24 +86,19 @@ in
   # home volume), independent of every other.
   programs.claude-code = {
     enable = true;
-    # nixpkgs-master only provides the build recipe (autopatchelf + the wrapper
-    # that wires in ripgrep/bubblewrap/socat); the actual release is self-pinned
-    # here so it tracks upstream independently of channel lag.
-    # Bump: set `version` to https://downloads.claude.ai/claude-code-releases/latest
-    # and paste `.platforms."linux-x64".checksum` from that release's manifest.json.
+    # nixpkgs-master's update bot lands each upstream release within about a
+    # day, and master is consumed directly, so there is no channel-advance delay
+    # on top of that. Reach for an `overrideAttrs` setting `version` + `src`
+    # only to jump ahead of a bot run for a specific fix, or to hold back a
+    # release that breaks something; a standing pin drifts further behind than
+    # the lag it was meant to avoid.
     #
     # Routed through `package` rather than home.packages because `lspServers`
     # below only takes effect when the module can wrap the binary: it builds a
     # symlinkJoin launcher that injects `--plugin-dir` (carrying the generated
     # .lsp.json) and refuses a null package. The module adds that wrapper to
     # home.packages itself, so it must not also be listed there by hand.
-    package = pkgs-master.claude-code.overrideAttrs (old: rec {
-      version = "2.1.222";
-      src = pkgs.fetchurl {
-        url = "https://downloads.claude.ai/claude-code-releases/${version}/linux-x64/claude";
-        sha256 = "10caae8f22b915c26bfff0e013a4d45608c4f1ae287583626569156f447730e5";
-      };
-    });
+    package = pkgs-master.claude-code;
     settings = {
       theme = "dark";
       # Suppress Claude's own generic desktop notification; the Notification
@@ -306,58 +304,7 @@ in
         };
       };
     };
-    context = ''
-      # Research clones
-
-      `~/repos/clones/` contains third-party source trees cloned for read-only
-      research and context — not for editing. Use them to inspect upstream
-      implementations, cross-reference APIs, and answer "how does X actually
-      work" questions instead of guessing from training data.
-
-      Sorted by topic. New clones land in the matching topic dir.
-
-      Rules:
-      - Read-only. Don't edit, commit, or push here. If you need to modify
-        upstream code, fork into `~/repos/forks/` instead.
-      - Check here before WebFetching a repo's docs or source — the local
-        clone is authoritative for whatever commit it's pinned to.
-      - The clones aren't guaranteed up-to-date with upstream; if freshness
-        matters, note the checked-out commit or fetch first.
-
-      # Comments and docstrings
-
-      Comments and docstrings explain the code, not the author's process.
-      Never write a comment whose subject is you or this session — what you
-      did, why you changed it, what it replaces, what task it came from, or
-      which caller prompted it. That belongs in the commit message or PR
-      description and rots the moment the code moves.
-
-      A comment is only worth writing if a future reader — with no knowledge
-      of this conversation — would benefit from it. It should explain:
-      - *what* the code does, only when the code itself isn't self-evident
-        (rare — prefer better names first); or
-      - *why* the code is the way it is: a non-obvious constraint, a subtle
-        invariant, a workaround for a specific upstream bug, behavior that
-        would otherwise surprise a reader.
-
-      Concretely, never write:
-      - "Added X to fix Y", "Replaced the old Z", "Refactored from ..."
-      - "Used by the foo flow", "Called from bar.ts", "Handles the case
-        from issue #123"
-      - Restatements of the code ("increment i by 1", "return the result")
-      - TODOs referencing the current task ("TODO: wire this up once the
-        other PR lands") — track those in the PR, not the source.
-
-      This applies to every language's comment/docstring syntax (`//`, `#`,
-      `/** */`, `"""..."""`, `---`, `;;`, etc.) and to commit messages for
-      code *inside* diffs (the commit body itself is the right place for
-      process narrative; the code is not).
-
-      # Git pushing
-
-      Never run `git push`, or otherwise push to a remote. Commit locally when
-      asked, but pushing is always the user's action: when a push is the next
-      step, give the user the exact command to run instead of running it.
+    context = sharedContext + ''
 
       # Commit attribution
 
@@ -378,22 +325,13 @@ in
 
       Record durable facts, preferences, and operational lessons as edits to
       THIS file (`~/repos/dotfiles/nixos/home/modules/claude.nix`) — add a short
-      topical section below. Do NOT write them to `~/.claude/projects/*/memory/`:
-      that path is home-manager-managed or ephemeral VM state and is not
-      version-controlled, so it is lost on reprovision. Edits here need a
-      `home-manager switch` to take effect. Keep entries terse — everything here
-      loads into every session's context.
-
-      # Nix store safety
-
-      Never run `du` — or any recursive file walk (`find`, `ls -R`, `wc` over a
-      tree) — over the Nix store or other multi-hundred-GB trees. On this host
-      the store is a large shared volume, so it means millions of `stat()` calls
-      (sustained CPU + I/O) and can run for hours; one such `du` had to be killed
-      by restarting the microVM. For free space use `df -h <path>`; for a
-      specific store path's size use `nix path-info -Sh <path>`. If a heavy
-      command gets backgrounded, verify its PID is actually dead — don't trust a
-      `pkill` that can itself be timed out.
+      topical section below. A lesson that applies to any coding agent, not just
+      Claude, goes in `agent-context.nix` instead, which this file appends to.
+      Do NOT write them to `~/.claude/projects/*/memory/`: that path is
+      home-manager-managed or ephemeral VM state and is not version-controlled,
+      so it is lost on reprovision. Edits here need a `home-manager switch` to
+      take effect. Keep entries terse — everything here loads into every
+      session's context.
     '';
   };
 
