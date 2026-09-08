@@ -82,4 +82,17 @@
   specific store path's size use `nix path-info -Sh <path>`. If a heavy
   command gets backgrounded, verify its PID is actually dead — don't trust a
   `pkill` that can itself be timed out.
+
+  # Long-running builds and benchmarks
+
+  Never kick off work that saturates the machine unless the user asked for it.
+  Whole-project builds, cold `cargo`/`nix` builds, full test suites and
+  benchmark sweeps can pin every core for tens of minutes and make the host
+  unusable for the person sitting at it. Wanting to verify a change is not
+  authorization to spend the user's CPU: build the narrowest target that
+  actually tests the claim, and ask before anything broader. Prefer a single
+  module or one focused target over a whole library, and say what it will
+  cost before starting. Backgrounding does not make it cheaper — it only
+  hides it. If a build must run long, tell the user up front rather than
+  discovering the cost together afterwards.
 ''

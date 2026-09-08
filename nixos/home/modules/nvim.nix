@@ -217,6 +217,28 @@
     filetree.neo-tree = {
       enable = true;
       setupOpts = {
+        # `traditional` makes Git walk ignored build trees on every refresh.
+        # Repositories are mounted over virtiofs in the dev VM, where those
+        # metadata-heavy walks are expensive. `matching` still identifies
+        # paths explicitly covered by ignore patterns so hide_gitignored keeps
+        # working, without traversing their contents.
+        event_handlers = [
+          {
+            event = "before_git_status";
+            handler = lib.generators.mkLuaInline ''
+              function(args)
+                for i, value in ipairs(args.status_args) do
+                  if value == "--ignored=traditional" then
+                    args.status_args[i] = "--ignored=matching"
+                  end
+                end
+              end
+            '';
+          }
+        ];
+        # Ignored nodes remain hidden by default and have no Git decoration
+        # when filtered items are revealed.
+        default_component_configs.git_status.symbols.ignored = "";
         window = {
           mappings = {
             "<space>" = "none";

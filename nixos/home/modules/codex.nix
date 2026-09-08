@@ -7,7 +7,7 @@
 # common/claude-deny-list.nix, so that policy is not shared here.
 {
   pkgs,
-  pkgs-master,
+  pkgs-unstable,
   ...
 }:
 let
@@ -18,8 +18,8 @@ let
       pkgs.jq
     ];
     derivationArgs = {
-      inherit (pkgs-master.codex) version;
-      meta = pkgs-master.codex.meta // {
+      inherit (pkgs-unstable.codex) version;
+      meta = pkgs-unstable.codex.meta // {
         mainProgram = "codex";
       };
     };
@@ -34,11 +34,11 @@ let
           project_key=$(jq -Rn --arg path "$codex_project_root" '$path')
           # Quoted segments in -c keys are treated literally, so put the
           # dynamic path in the projects table value instead.
-          exec ${pkgs-master.codex}/bin/codex \
+          exec ${pkgs-unstable.codex}/bin/codex \
             -c "projects={$project_key={trust_level=\"trusted\"}}" "$@"
           ;;
         *)
-          exec ${pkgs-master.codex}/bin/codex "$@"
+          exec ${pkgs-unstable.codex}/bin/codex "$@"
           ;;
       esac
     '';

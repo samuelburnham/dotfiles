@@ -271,30 +271,6 @@ let
       "$effpct" "$mem" "$cls" "$effpct" "$rawpct" "$effavailg" "$swapused" "$swaptot"
   '';
 
-  # Host terminal that opens in the directory of the dev VM's active tmux
-  # pane (Super+Shift+T). ~/repos is the same virtiofs tree on both sides,
-  # so the path translates 1:1 — the main use is pushing: the write-capable
-  # SSH key exists only on the host, so `git push` always happens in a host
-  # shell, and this drops that shell straight into the repo/worktree being
-  # worked on.
-  #
-  # The tmux query MUST run through a login shell (`$SHELL -lc`), like the
-  # ssh-dev-vm wrapper does. tmux's socket lives under $TMUX_TMPDIR
-  # (home-manager's secureSocket points it at XDG_RUNTIME_DIR, /run/user/UID),
-  # and only a login shell exports that. A bare `ssh dev-vm 'tmux ...'` runs
-  # non-login with TMUX_TMPDIR unset, so tmux looks at the default
-  # /tmp/tmux-UID socket, finds no server, and the dir comes back empty.
-  # Falls back to the ghostty default (~/repos) when the VM is down, nothing
-  # is attached, or the pane path is VM-only (outside the shared ~/repos).
-  ghosttyVmCwd = pkgs.writeShellScript "ghostty-vm-cwd" ''
-    dir=$(${pkgs.openssh}/bin/ssh -o BatchMode=yes -o ConnectTimeout=2 \
-      dev-vm '"$SHELL" -lc "tmux display -p \"#{pane_current_path}\""' 2>/dev/null)
-    if [ -n "$dir" ] && [ -d "$dir" ]; then
-      exec ghostty --working-directory="$dir"
-    fi
-    exec ghostty
-  '';
-
   # Idle auto-suspend with a runtime opt-out. hypridle's final listener runs
   # `suspendUnlessInhibited`, which suspends only when the flag file is
   # absent; the Waybar pill flips that flag via `toggleSuspendInhibit`.
@@ -928,11 +904,10 @@ in
       hl.bind(mod .. " + C", hl.dsp.exec_cmd("hyprpicker -a -f hex"))
       hl.bind(mod .. " + SHIFT + D", hl.dsp.exec_cmd("darkman toggle"))
       hl.bind(mod .. " + T", hl.dsp.exec_cmd(terminal))
-      -- Host ghostty, opened in the dev VM's active tmux pane directory
-      -- (or ~/repos when the VM is down) — the push terminal: the
-      -- write-capable SSH key lives only on the host, so git push happens
-      -- here, already cd'd to the repo being worked on in the VM.
-      hl.bind(mod .. " + SHIFT + T", hl.dsp.exec_cmd("uwsm app -- ${ghosttyVmCwd}"))
+      -- Plain host ghostty — the push terminal: the write-capable SSH key
+      -- lives only on the host, so git push always happens here rather than
+      -- in the dev VM.
+      hl.bind(mod .. " + SHIFT + T", hl.dsp.exec_cmd("uwsm app -- ghostty"))
 
       -- Escape-hatch terminal, deliberately NOT uwsm-wrapped: if `uwsm app`
       -- is ever broken every wrapped bind above is dead, and this raw
