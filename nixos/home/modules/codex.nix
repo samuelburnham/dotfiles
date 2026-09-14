@@ -69,6 +69,9 @@ in
     enable = true;
     package = codexWrapped;
     settings = {
+      # config.toml is a store symlink, so `/model` in the TUI cannot save a
+      # default; it has to be declared here.
+      model = "gpt-6-astra";
       model_reasoning_effort = "max";
       approvals_reviewer = "auto_review";
       features.apps = false;
