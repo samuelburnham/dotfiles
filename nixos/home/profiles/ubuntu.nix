@@ -22,4 +22,15 @@
   home.packages = [
     inputs.self.packages.${pkgs.system}.nvim
   ];
+
+  # Ghostty's terminfo (`xterm-ghostty`) isn't in Ubuntu's ncurses database,
+  # so without it every curses program on the box sees an unknown $TERM and
+  # degrades — wrong colours, broken drawing. Only the terminfo output is
+  # needed, not the terminal itself. Installed into ~/.terminfo, which
+  # ncurses searches unconditionally, rather than relying on TERMINFO_DIRS
+  # being exported into every session.
+  home.file = {
+    ".terminfo/x/xterm-ghostty".source = "${pkgs.ghostty.terminfo}/share/terminfo/x/xterm-ghostty";
+    ".terminfo/g/ghostty".source = "${pkgs.ghostty.terminfo}/share/terminfo/g/ghostty";
+  };
 }

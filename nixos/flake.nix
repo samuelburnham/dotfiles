@@ -126,9 +126,9 @@
           packages.default = customNeovim;
 
           # Surface the HM activation derivation as a package + runnable app
-          # so `nix build .#ubuntu` and `nix run .#ubuntu` work without
-          # needing a home-manager CLI install on the target.
-          packages.ubuntu = self.homeConfigurations.ubuntu.activationPackage;
+          # so `nix build .#sam` and `nix run .#sam` work without needing a
+          # home-manager CLI install on the target.
+          packages.sam = self.homeConfigurations.sam.activationPackage;
 
           # Root-owned Claude deny policy for non-NixOS targets (the Ubuntu
           # box), which can't use environment.etc. The box has sudo, so
@@ -143,9 +143,9 @@
               permissions.deny = import ./common/claude-deny-list.nix;
             };
 
-          apps.ubuntu = {
+          apps.sam = {
             type = "app";
-            program = "${self.homeConfigurations.ubuntu.activationPackage}/activate";
+            program = "${self.homeConfigurations.sam.activationPackage}/activate";
           };
         };
 
@@ -159,8 +159,8 @@
           # Single source of truth for the primary user's login name.
           # Threaded through specialArgs (NixOS) and extraSpecialArgs
           # (home-manager) so every module derives paths and user-account
-          # settings from it. The ubuntu standalone HM config below
-          # overrides this to "ubuntu".
+          # settings from it, on NixOS hosts and the standalone Ubuntu
+          # config alike.
           username = "sam";
           pkgs-unstable = import nixpkgs-unstable { inherit system; };
           pkgs-master = import nixpkgs-master {
@@ -211,16 +211,22 @@
 
           # Standalone home-manager — for non-NixOS machines where we install
           # Nix and activate HM without a NixOS system layer (e.g. Ubuntu AMI
-          # provisioned via terraform-server). Activate on the target with:
-          #   nix run github:samuelburnham/dotfiles?dir=nixos#ubuntu
-          homeConfigurations.ubuntu = home-manager.lib.homeManagerConfiguration {
+          # provisioned via terraform-server, where `sam` is a seeded login
+          # alongside the AMI's default `ubuntu` user). Activate on the
+          # target with:
+          #   nix run github:samuelburnham/dotfiles?dir=nixos#sam
+          homeConfigurations.sam = home-manager.lib.homeManagerConfiguration {
             pkgs = import nixpkgs {
               inherit system;
               config.allowUnfree = true;
             };
             extraSpecialArgs = {
-              inherit inputs pkgs-unstable pkgs-master;
-              username = "ubuntu";
+              inherit
+                inputs
+                pkgs-unstable
+                pkgs-master
+                username
+                ;
             };
             modules = [ ./home/profiles/ubuntu.nix ];
           };

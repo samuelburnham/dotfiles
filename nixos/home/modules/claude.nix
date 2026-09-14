@@ -101,6 +101,13 @@ in
     package = pkgs-master.claude-code;
     settings = {
       theme = "dark";
+      # Defaults to true, which injects a session instruction to add a
+      # Co-Authored-By trailer -- contradicting the CLAUDE.md rule below, and
+      # winning, since it arrives later and claims to supersede it.
+      includeCoAuthoredBy = false;
+      # Default model for every new session. `/model` still switches within a
+      # session, and CLAUDE_CODE_MODEL / --model override this at launch.
+      model = "claude-fable-5-1";
       # Suppress Claude's own generic desktop notification; the Notification
       # hook below emits a replacement that names the originating
       # worktree/session. The hook fires independent of this channel setting.
