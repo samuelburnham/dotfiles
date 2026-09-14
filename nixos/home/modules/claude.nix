@@ -101,10 +101,17 @@ in
     package = pkgs-master.claude-code;
     settings = {
       theme = "dark";
-      # Defaults to true, which injects a session instruction to add a
-      # Co-Authored-By trailer -- contradicting the CLAUDE.md rule below, and
-      # winning, since it arrives later and claims to supersede it.
-      includeCoAuthoredBy = false;
+      # By default a session instruction asks for a Co-Authored-By trailer, a
+      # PR footer, and a session URL -- contradicting the CLAUDE.md rule
+      # below, and winning, since it arrives later and claims to supersede
+      # it. Empty strings hide the trailer and footer; `includeCoAuthoredBy`
+      # is the deprecated predecessor of this object and never covered the
+      # session URL.
+      attribution = {
+        commit = "";
+        pr = "";
+        sessionUrl = false;
+      };
       # Default model for every new session. `/model` still switches within a
       # session, and CLAUDE_CODE_MODEL / --model override this at launch.
       model = "claude-fable-5-1";
