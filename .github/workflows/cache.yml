@@ -1,0 +1,35 @@
+name: cache
+
+# Builds the standalone outputs that non-NixOS machines pull from GitHub and
+# pushes their closures to the samuelburnham Cachix cache, so activating the
+# home-manager config on a fresh box downloads nvim, bencher, worktrunk and
+# the rest instead of compiling them. Runs only on the branch those machines
+# track. Needs a CACHIX_AUTH_TOKEN repository secret with write access to the
+# cache; without it the build still runs but nothing is pushed.
+
+on:
+  push:
+    branches: [nixos]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  push:
+    name: "nixos: build and push sam + nvim"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: DeterminateSystems/determinate-nix-action@v3
+      - uses: cachix/cachix-action@v16
+        with:
+          name: samuelburnham
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+      # The activation package's closure is the whole home environment, so
+      # pushing it covers every derivation home-manager-setup would need.
+      - run: nix build --accept-flake-config --print-build-logs ./nixos#sam ./nixos#nvim

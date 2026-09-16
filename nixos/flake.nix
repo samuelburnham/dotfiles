@@ -1,6 +1,18 @@
 {
   description = "NixOS flake config";
 
+  # Binary cache for the standalone outputs (the `sam` home config and nvim),
+  # populated by .github/workflows/cache.yml on every push to `nixos`. Nix
+  # only honours these for trusted users, and prompts before using them unless
+  # invoked with --accept-flake-config; the cloud boxes also register the
+  # cache in the daemon config, which covers untrusted logins.
+  nixConfig = {
+    extra-substituters = [ "https://samuelburnham.cachix.org" ];
+    extra-trusted-public-keys = [
+      "samuelburnham.cachix.org-1:mrT2yCIiV8eYDgsCslfpE0FCPyEoi4GZy3Vv9htiQeU="
+    ];
+  };
+
   inputs = {
     # NixOS official package source, using the nixos-26.05 branch
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
