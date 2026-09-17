@@ -134,6 +134,28 @@
           # nixfmt (RFC 166), respects .gitignore, caches per-file, parallel.
           formatter = pkgs.nixfmt-tree;
 
+          # Push access to the cache declared in nixConfig above, scoped to
+          # this flake: a devshell is per-flake, so the token is present for
+          # `nix develop` on this checkout and nowhere else, and cachix stays
+          # out of every profile.
+          #
+          # Host-only in practice — /run/secrets does not exist in the dev
+          # microvm, which pulls from the cache but is deliberately given
+          # nothing that can write to it. Silent when the secret is absent;
+          # cachix reports its own missing-token error if a push is attempted.
+          #
+          # Read at shell entry rather than eval, so the token never reaches
+          # the Nix store. cachix keys its auth token globally rather than per
+          # cache (Config.authToken), hence one secret named per cache.
+          devShells.default = pkgs.mkShell {
+            packages = [ pkgs.cachix ];
+            shellHook = ''
+              secret=/run/secrets/cachix-token-samuelburnham
+              [ -r "$secret" ] && export CACHIX_AUTH_TOKEN="$(cat "$secret")"
+              unset secret
+            '';
+          };
+
           packages.nvim = customNeovim;
           packages.default = customNeovim;
 

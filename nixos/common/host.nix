@@ -185,6 +185,15 @@
         mode = "0400";
         owner = username;
       };
+      # Cachix write token for samuelburnham.cachix.org, the cache this flake
+      # publishes to. Named per cache because cachix keys its auth token
+      # globally, not per cache, so each one needs its own secret and its own
+      # scope. Held on the host only: the dev microvm is deliberately given no
+      # credential that can write to a shared artifact store.
+      cachix-token-samuelburnham = {
+        mode = "0400";
+        owner = username;
+      };
       # GCP disabled for now — no service-account key yet. Re-enable once
       # `gcp-credentials` is added to secrets.yaml (and the export in base.nix).
       # gcp-credentials = {
